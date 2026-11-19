@@ -1,0 +1,53 @@
+# Classification taxonomy. This file is rendered into the cached system prompt,
+# and any edit changes the prompt_version, so old and new results never mix.
+#
+# Each category needs: name (snake_case), definition, example (a short, made-up review).
+
+categories:
+  - name: bug_crash
+    definition: The game crashes, freezes, fails to launch, loses progress or purchases, or something visibly behaves wrong.
+    example: "Game crashes every time I open the shop after the update."
+
+  - name: performance_lag
+    definition: Low or unstable FPS, stutter, overheating, battery drain, long loading times on the device itself.
+    example: "Drops to 20 fps on my phone and gets really hot."
+
+  - name: matchmaking
+    definition: Who the player is matched with or how long it takes - skill or level gaps, long queues, unbalanced teams.
+    example: "I'm level 12 and keep getting matched with level 200 players."
+
+  - name: balance_weapons
+    definition: Weapons, skins, maps or modes feel unfair, overpowered or underpowered.
+    example: "The new sniper one-shots everyone, please nerf it."
+
+  - name: monetization_iap
+    definition: Prices, pay-to-win, loot boxes, purchases that did not arrive, refunds, subscriptions.
+    example: "Too pay to win, you can't compete without buying cases."
+
+  - name: ads
+    definition: Too many ads, forced or unskippable ads, ads that break the game or ignore an ad-free purchase.
+    example: "An ad after every match, it's unbearable."
+
+  - name: cheating_hackers
+    definition: Cheaters, hackers, aimbots, wallhacks, exploits, or weak anti-cheat and reporting.
+    example: "Every lobby has someone with an aimbot."
+
+  - name: controls_ux
+    definition: Touch controls, HUD, menus, settings, sensitivity, onboarding or other usability problems.
+    example: "Can't move the fire button and the sensitivity resets."
+
+  - name: content_request
+    definition: Asks for new maps, modes, weapons, features or events.
+    example: "Please add a zombie mode and more maps."
+
+  - name: connectivity_server
+    definition: Ping, disconnects, server errors, region or login and network problems.
+    example: "300 ping on EU servers and I keep getting kicked."
+
+  - name: praise
+    definition: Positive feedback about the game without a specific complaint.
+    example: "Best mobile FPS I've played, love it."
+
+  - name: other
+    definition: Nothing above fits, or the review has no usable content (e.g. a single emoji or unrelated text).
+    example: "asdfgh"

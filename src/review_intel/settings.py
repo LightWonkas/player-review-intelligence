@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     classify_model: str = "claude-haiku-5-5"
     report_model: str = "claude-sonnet-5-5"
     apps_config_path: Path = Path("config/apps.yaml")
+    taxonomy_path: Path = Path("config/taxonomy.yaml")
 
 
 def get_settings() -> Settings:
