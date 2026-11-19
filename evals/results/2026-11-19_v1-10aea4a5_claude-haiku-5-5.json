@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-11-19T17:54:12+00:00",
+  "created_at": "2026-11-19T20:49:54+00:00",
   "prompt_version": "v1-10aea4a5",
   "model": "claude-haiku-5-5",
   "n_labels": 100,
@@ -265,7 +265,15 @@
           "praise": 0,
           "other": 3
         }
-      }
+      },
+      "primary_accuracy_ci": [
+        0.7714,
+        0.9714
+      ],
+      "macro_f1_ci": [
+        0.5212,
+        0.9515
+      ]
     },
     "dev": {
       "n": 65,
@@ -528,7 +536,15 @@
           "praise": 1,
           "other": 5
         }
-      }
+      },
+      "primary_accuracy_ci": [
+        0.8154,
+        0.9538
+      ],
+      "macro_f1_ci": [
+        0.581,
+        0.9282
+      ]
     },
     "all": {
       "n": 100,
@@ -791,7 +807,15 @@
           "praise": 1,
           "other": 8
         }
-      }
+      },
+      "primary_accuracy_ci": [
+        0.82,
+        0.95
+      ],
+      "macro_f1_ci": [
+        0.5306,
+        0.8478
+      ]
     }
   },
   "judge": {
@@ -804,6 +828,6 @@
   },
   "cost_usd": {
     "classification": 0.0,
-    "judge": 0.054858
+    "judge": 0.0
   }
 }
