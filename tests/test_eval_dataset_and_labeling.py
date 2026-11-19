@@ -1,3 +1,4 @@
+import json
 from collections import Counter
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -148,3 +149,17 @@ def test_make_label_puts_primary_first_without_duplicates() -> None:
     label = make_label(CANDIDATE, "ads", ["ads", "praise"], Sentiment.NEUTRAL)
 
     assert label.categories == ["ads", "praise"]
+
+
+def test_labeler_defaults_to_human_and_old_lines_still_load(tmp_path: Path) -> None:
+    label = make_label(CANDIDATE, "ads", [], Sentiment.NEGATIVE)
+    path = tmp_path / "labels.jsonl"
+    data = label.model_dump(mode="json")
+    del data["labeler"]  # a line written before the field existed
+    path.write_text(json.dumps(data) + "\n", encoding="utf-8")
+
+    assert label.labeler == "human"
+    assert load_labels(path)[0].labeler == "human"
+    assert make_label(CANDIDATE, "ads", [], Sentiment.NEGATIVE, "claude-opus-5-5").labeler == (
+        "claude-opus-5-5"
+    )

@@ -61,6 +61,8 @@ class LabeledReview(BaseModel):
     sentiment: Sentiment
     split: Split
     labeled_at: datetime
+    # Who set the label: "human", or a model id when a stronger model labeled blind.
+    labeler: str = "human"
 
     def to_input(self, position: int) -> ReviewInput:
         return ReviewInput(
@@ -100,7 +102,11 @@ def append_label(label: LabeledReview, path: Path = DEFAULT_LABELS_PATH) -> None
 
 
 def make_label(
-    candidate: Candidate, primary: str, extra: list[str], sentiment: Sentiment
+    candidate: Candidate,
+    primary: str,
+    extra: list[str],
+    sentiment: Sentiment,
+    labeler: str = "human",
 ) -> LabeledReview:
     return LabeledReview(
         key=candidate.key,
@@ -114,6 +120,7 @@ def make_label(
         sentiment=sentiment,
         split=split_for(candidate.key),
         labeled_at=datetime.now(UTC),
+        labeler=labeler,
     )
 
 
