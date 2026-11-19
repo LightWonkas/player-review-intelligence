@@ -1,0 +1,22 @@
+# Games tracked by review-intel. Add a game by adding an entry here; no code changes needed.
+#
+# slug:     the key used on the CLI (--app critical-strike). Groups one game's store listings.
+# store:    google_play | app_store
+# store_app_id:
+#   google_play -> Android package name (from the Play URL ?id=...)
+#   app_store   -> numeric iTunes id (from the App Store URL .../id<NUMBER>)
+# country / language: which storefront to read reviews from.
+
+games:
+  - slug: critical-strike
+    name: "Critical Strike CS: Online FPS"
+    developer: Vertigo Games
+    listings:
+      - store: google_play
+        store_app_id: com.critical.strike2
+        country: us
+        language: en
+      - store: app_store
+        store_app_id: "1467648713"
+        country: us
+        language: en
