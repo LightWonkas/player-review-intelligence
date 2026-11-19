@@ -7,6 +7,7 @@ because fixtures are committed to a public repo. Tests then run fully offline.
 """
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -19,8 +20,11 @@ PLAY_APP_ID = "com.critical.strike2"
 APP_STORE_URL = (
     "https://itunes.apple.com/us/rss/customerreviews/page=1/id=1467648713/sortby=mostrecent/json"
 )
+APP_PAGE_URL = "https://apps.apple.com/us/app/id1467648713"
 KEEP = 3
 REDACTED = "REDACTED"
+# One version-history list item on the App Store page.
+HISTORY_ITEM = re.compile(r'<li><div class="container detail.*?</li>', re.DOTALL)
 
 
 def record_google_play() -> None:
@@ -51,6 +55,28 @@ def record_app_store() -> None:
     _write("app_store_page.json", data)
 
 
+def trim_version_history(page: str) -> str:
+    """Keep only the first few version-history entries: the full page is ~800 KB."""
+    items = [item for item in HISTORY_ITEM.findall(page) if "<time datetime" in item]
+    if not items:
+        raise SystemExit("No version history in the page; Apple may have served a bare shell.")
+    return "<html><body><ul>\n" + "\n".join(items[:KEEP]) + "\n</ul></body></html>\n"
+
+
+def record_app_store_history() -> None:
+    response = httpx.get(
+        APP_PAGE_URL,
+        timeout=30.0,
+        headers={"User-Agent": "review-intel/0.1"},
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    FIXTURES.mkdir(parents=True, exist_ok=True)
+    path = FIXTURES / "app_store_versions.html"
+    path.write_text(trim_version_history(response.text), encoding="utf-8")
+    print(f"wrote {path.relative_to(FIXTURES.parents[1])}")
+
+
 def _write(name: str, payload: Any) -> None:
     FIXTURES.mkdir(parents=True, exist_ok=True)
     path = FIXTURES / name
@@ -61,3 +87,4 @@ def _write(name: str, payload: Any) -> None:
 if __name__ == "__main__":
     record_google_play()
     record_app_store()
+    record_app_store_history()
