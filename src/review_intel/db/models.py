@@ -117,13 +117,15 @@ class Review(Base):
 class Classification(Base):
     """One model's verdict on one review under one prompt version.
 
-    Unique per (review, prompt_version) so an eval can compare prompt v1 and v2
-    side by side instead of the new run overwriting the old one.
+    Unique per (review, prompt_version, model) so an eval can compare prompt v1 with
+    v2, or Haiku with Sonnet, side by side instead of a new run overwriting the old one.
     """
 
     __tablename__ = "classifications"
     __table_args__ = (
-        UniqueConstraint("review_id", "prompt_version", name="uq_classifications_review_prompt"),
+        UniqueConstraint(
+            "review_id", "prompt_version", "model", name="uq_classifications_review_prompt_model"
+        ),
         CheckConstraint("severity BETWEEN 1 AND 5", name="ck_classifications_severity_range"),
     )
 
@@ -141,6 +143,30 @@ class Classification(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
     review: Mapped[Review] = relationship(back_populates="classifications")
+
+
+class ClassificationFailure(Base):
+    """A review the model could not classify validly, kept so nothing is silently dropped.
+
+    One row per (review, prompt_version, model); `attempts` grows on every failed run
+    and the row is deleted once a later run succeeds.
+    """
+
+    __tablename__ = "classification_failures"
+    __table_args__ = (
+        UniqueConstraint(
+            "review_id", "prompt_version", "model", name="uq_failures_review_prompt_model"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("reviews.id", ondelete="CASCADE"), index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    model: Mapped[str] = mapped_column(String(100))
+    error: Mapped[str] = mapped_column(Text)
+    raw_output: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(default=0)
+    last_attempt_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
 class PatchNote(Base):
