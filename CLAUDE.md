@@ -10,6 +10,7 @@ uv run review-intel --help       # CLI
 uv run review-intel db init      # create tables + register games from config/apps.yaml
 uv run review-intel fetch --app critical-strike --store all --limit 100
 uv run python scripts/record_fixtures.py   # re-record test fixtures (live network, by hand only)
+uv run review-intel classify --app critical-strike --limit 100 --dry-run   # count + cost estimate, free
 uv run review-intel classify --app critical-strike --limit 100   # costs money: Claude API
 uv run review-intel classify --app critical-strike --limit 500 --batch   # half price, async
 uv run review-intel label --app critical-strike   # hand-label the eval set (blind)
@@ -44,6 +45,8 @@ uv run mypy                      # strict type check
 - `src/review_intel/report.py`: weekly report (facts from SQL, Sonnet prose, number/id checks, judge); `slack.py`
 - `src/review_intel/dashboard/`: FastAPI app, Jinja2 templates, server-side SVG charts
 - `src/review_intel/mcp_server.py`: MCP tools/resources/prompts (SDK 2.x `MCPServer` = FastMCP)
+- `.claude/skills/`: `weekly-review-report`, `add-new-game`, `improve-classifier`; `.claude/agents/`: `bug-analyst`, `sentiment-analyst`, `report-reviewer` (read-only MCP tools)
+- `docs/ARCHITECTURE.md`: every module in two sentences; `docs/example-report.md`: a real report
 - `src/review_intel/apps_config.py`: validated `config/apps.yaml` (games to track)
 - `src/review_intel/settings.py`: env / `.env` settings
 
