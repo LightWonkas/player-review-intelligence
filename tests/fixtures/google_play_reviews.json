@@ -1,0 +1,41 @@
+[
+  {
+    "reviewId": "94739045-ab07-48f8-b47d-bcd62c203e75",
+    "userName": "REDACTED",
+    "userImage": "REDACTED",
+    "content": "😒",
+    "score": 1,
+    "thumbsUpCount": 0,
+    "reviewCreatedVersion": null,
+    "at": 1795002626,
+    "replyContent": null,
+    "repliedAt": null,
+    "appVersion": null
+  },
+  {
+    "reviewId": "8868952b-8ec0-488d-b1b2-6fd302e7aa62",
+    "userName": "REDACTED",
+    "userImage": "REDACTED",
+    "content": "playing console since 1999. now I am playing on my phone...",
+    "score": 5,
+    "thumbsUpCount": 0,
+    "reviewCreatedVersion": "15.055",
+    "at": 1795001096,
+    "replyContent": null,
+    "repliedAt": null,
+    "appVersion": "15.055"
+  },
+  {
+    "reviewId": "6b853d3c-1426-44b9-8d8c-cde0e2cecf39",
+    "userName": "REDACTED",
+    "userImage": "REDACTED",
+    "content": "its great just hope theres no ads",
+    "score": 5,
+    "thumbsUpCount": 0,
+    "reviewCreatedVersion": "15.055",
+    "at": 1795000533,
+    "replyContent": null,
+    "repliedAt": null,
+    "appVersion": "15.055"
+  }
+]
