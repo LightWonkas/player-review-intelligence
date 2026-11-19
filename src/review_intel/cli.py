@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Annotated
 
 import anthropic
+import httpx
 import typer
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from review_intel import __version__
@@ -31,6 +32,7 @@ from review_intel.classify import (
 )
 from review_intel.collectors import build_sources
 from review_intel.db.apps import SyncResult, sync_apps
+from review_intel.db.models import App
 from review_intel.db.session import init_db, make_engine, make_session_factory
 from review_intel.domain import Store
 from review_intel.evals.dataset import (
@@ -53,7 +55,19 @@ from review_intel.evals.runner import (
 from review_intel.ingest import fetch_and_store
 from review_intel.llm.client import make_client
 from review_intel.llm.pricing import UsageTotals
+from review_intel.llm.prompts import prompt_version
 from review_intel.llm.taxonomy import load_taxonomy
+from review_intel.patch_notes import (
+    EmptyPageError,
+    NotesResult,
+    fetch_app_store_history,
+    load_markdown,
+    store_notes,
+)
+from review_intel.rag.ask import answer_question, build_context, render_context
+from review_intel.rag.embedder import Embedder, SentenceTransformerEmbedder
+from review_intel.rag.index import IndexMissingError, index_game
+from review_intel.rag.spikes import SpikeSettings, detect_spikes
 from review_intel.settings import get_settings
 
 app = typer.Typer(
@@ -396,3 +410,224 @@ def eval_command(
     if write_readme:
         update_readme(Path("README.md"), render_readme_block(load_reports()))
         typer.echo("Updated the eval table in README.md")
+
+
+# --- M5: patch notes, vector index, ask, spikes ------------------------------------
+
+patches_app = typer.Typer(help="Patch notes (release notes per version).", no_args_is_help=True)
+app.add_typer(patches_app, name="patches")
+
+
+def make_embedder(model_name: str) -> Embedder:
+    """Indirection so tests can swap in a fake without loading torch."""
+    return SentenceTransformerEmbedder(model_name)
+
+
+def _current_prompt_version() -> str:
+    return prompt_version(load_taxonomy(get_settings().taxonomy_path))
+
+
+def _store_app(session: Session, slug: str, store: Store) -> App | None:
+    return session.scalar(select(App).where(App.slug == slug, App.store == store))
+
+
+def _print_notes_result(result: NotesResult) -> None:
+    typer.echo(
+        f"Patch notes: {result.created} new, {result.updated} updated, {result.unchanged} unchanged"
+    )
+
+
+@patches_app.command("fetch")
+def patches_fetch(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Fetch the App Store version history (~25 versions with dates and notes)."""
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    game = _get_game(engine, config, app_slug)
+    listing = next((item for item in game.listings if item.store is Store.APP_STORE), None)
+    if listing is None:
+        engine.dispose()
+        raise typer.BadParameter(f"{app_slug} has no app_store listing", param_hint="--app")
+    try:
+        notes = fetch_app_store_history(listing.store_app_id, listing.country)
+    except (httpx.HTTPError, EmptyPageError) as exc:
+        engine.dispose()
+        typer.echo(f"Could not fetch the version history: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    with make_session_factory(engine)() as session:
+        store_app = _store_app(session, app_slug, Store.APP_STORE)
+        assert store_app is not None  # registered by _prepare_db
+        result = store_notes(session, store_app, notes)
+        session.commit()
+    engine.dispose()
+    typer.echo(f"Fetched {len(notes)} versions ({notes[-1].version} to {notes[0].version})")
+    _print_notes_result(result)
+
+
+@patches_app.command("import")
+def patches_import(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    file: Annotated[
+        Path,
+        typer.Option(exists=True, dir_okay=False, help="Markdown with '## <version> (<date>)'."),
+    ],
+    store: Annotated[
+        StoreChoice, typer.Option(help="Store the notes belong to.")
+    ] = StoreChoice.GOOGLE_PLAY,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Import hand-written notes from a markdown file."""
+    if store is StoreChoice.ALL:
+        raise typer.BadParameter("pick one store", param_hint="--store")
+    notes = load_markdown(file)
+    if not notes:
+        typer.echo(f"No '## <version> (<YYYY-MM-DD>)' sections found in {file}.", err=True)
+        raise typer.Exit(code=1)
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    with make_session_factory(engine)() as session:
+        store_app = _store_app(session, app_slug, Store(store.value))
+        if store_app is None:
+            engine.dispose()
+            raise typer.BadParameter(
+                f"{app_slug} has no {store.value} listing", param_hint="--store"
+            )
+        result = store_notes(session, store_app, notes)
+        session.commit()
+    engine.dispose()
+    _print_notes_result(result)
+
+
+@app.command()
+def index(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Embed new or changed reviews and patch-note lines locally (no API cost)."""
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    embedder = make_embedder(settings.embedding_model)
+    started = time.monotonic()
+    with make_session_factory(engine)() as session:
+        result = index_game(session, app_slug, embedder)
+        session.commit()
+    engine.dispose()
+    typer.echo(
+        f"Embedded {result.reviews_embedded} reviews and {result.chunks_embedded} patch-note "
+        f"lines with {embedder.name} ({result.unchanged} unchanged, {result.removed} removed) "
+        f"in {time.monotonic() - started:.0f}s"
+    )
+
+
+@app.command()
+def ask(
+    question: Annotated[str, typer.Argument(help="A question about the game's reviews.")],
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    reviews: Annotated[int, typer.Option(min=1, max=50, help="Reviews to retrieve.")] = 12,
+    show_context: Annotated[
+        bool, typer.Option("--show-context", help="Print what was retrieved.")
+    ] = False,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Answer a question from retrieved reviews and patch notes, with citations."""
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    embedder = make_embedder(settings.embedding_model)
+    with make_session_factory(engine)() as session:
+        try:
+            context = build_context(
+                session,
+                app_slug,
+                question,
+                embedder,
+                model=settings.classify_model,
+                prompt_version=_current_prompt_version(),
+                k_reviews=reviews,
+            )
+        except IndexMissingError as exc:
+            engine.dispose()
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+    engine.dispose()
+    if show_context:
+        typer.echo(render_context(context))
+        typer.echo("")
+    try:
+        result = answer_question(make_client(settings), settings.report_model, context)
+    except anthropic.AuthenticationError as exc:
+        typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
+        raise typer.Exit(code=1) from exc
+    if result.error:
+        typer.echo(f"No answer: {result.error}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(result.answer)
+    typer.echo("")
+    cited_reviews = ", ".join(f"r{i}" for i in result.cited_reviews) or "none"
+    cited_versions = ", ".join(result.cited_versions) or "none"
+    typer.echo(f"Sources: reviews {cited_reviews} | versions {cited_versions}")
+    for note in result.notes:
+        typer.echo(f"Note: {note}")
+    if result.invalid_citations:
+        removed = ", ".join(result.invalid_citations)
+        typer.echo(f"Removed citations not in the context: {removed}", err=True)
+    if result.usage is not None:
+        totals = UsageTotals()
+        totals.add(result.usage)
+        typer.echo(f"{settings.report_model}: {totals.describe(settings.report_model)}")
+
+
+@app.command()
+def spikes(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    min_reviews: Annotated[
+        int, typer.Option(min=2, help="Classified reviews needed on each side.")
+    ] = SpikeSettings.min_reviews,
+    min_increase: Annotated[
+        float, typer.Option(min=0.0, max=1.0, help="Share increase, e.g. 0.10 = 10 points.")
+    ] = SpikeSettings.min_increase,
+    link_lines: Annotated[
+        bool, typer.Option(help="Rank patch-note lines by similarity (loads the embedder).")
+    ] = True,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Flag categories whose share jumped in a version, linked to that version's notes."""
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    embedder = make_embedder(settings.embedding_model) if link_lines else None
+    with make_session_factory(engine)() as session:
+        found = detect_spikes(
+            session,
+            app_slug,
+            model=settings.classify_model,
+            prompt_version=_current_prompt_version(),
+            settings=SpikeSettings(min_reviews=min_reviews, min_increase=min_increase),
+            embedder=embedder,
+        )
+    engine.dispose()
+    if not found:
+        typer.echo("No spikes found.")
+        return
+    for spike in found:
+        typer.echo(
+            f"{spike.store.value} v{spike.version}: {spike.category} "
+            f"{spike.before_share:.0%} -> {spike.after_share:.0%} "
+            f"({spike.after_count}/{spike.after_n} vs {spike.before_count}/{spike.before_n} "
+            f"in v{', v'.join(spike.baseline_versions)}; z={spike.z:.1f})"
+        )
+        if spike.note_version:
+            typer.echo(f"  patch note in force: v{spike.note_version} ({spike.note_date})")
+            for line, similarity in spike.note_lines:
+                typer.echo(f"    {similarity:.2f}  {line}")
+        else:
+            typer.echo("  no patch note for this version")
+        typer.echo("  examples: " + ", ".join(f"r{i}" for i in spike.example_review_ids))
