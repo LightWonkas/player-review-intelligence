@@ -8,6 +8,8 @@ AI system that collects public app-store reviews for mobile games, classifies th
 uv sync                          # install
 uv run review-intel --help       # CLI
 uv run review-intel db init      # create tables + register games from config/apps.yaml
+uv run review-intel fetch --app critical-strike --store all --limit 100
+uv run python scripts/record_fixtures.py   # re-record test fixtures (live network, by hand only)
 uv run pytest                    # tests
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                      # strict type check
@@ -17,6 +19,8 @@ uv run mypy                      # strict type check
 
 - `src/review_intel/cli.py`: thin Typer CLI; logic lives in library modules
 - `src/review_intel/db/`: SQLAlchemy models, engine setup, apps sync
+- `src/review_intel/collectors/`: `ReviewSource` interface + Google Play / App Store collectors
+- `src/review_intel/ingest.py`: idempotent upserts; `retry.py`: backoff + request pacing
 - `src/review_intel/apps_config.py`: validated `config/apps.yaml` (games to track)
 - `src/review_intel/settings.py`: env / `.env` settings
 
