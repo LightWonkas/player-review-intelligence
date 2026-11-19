@@ -4,7 +4,7 @@ An AI agent system that collects public app-store reviews for mobile games, clas
 
 Games are configured in [`config/apps.yaml`](config/apps.yaml) (Google Play + App Store); adding one needs no code changes.
 
-> Status: **M5 (RAG over patch notes)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
+> Status: **M6 (MCP server)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
 
 ## Quickstart
 
@@ -107,6 +107,61 @@ With ~20 classified App Store reviews per version and only about five weeks of G
 history, the current data has no significant spikes. The closest candidate is a weapon-balance
 increase on Google Play from 3% to 8% (z = 1.8). More history makes the detector useful; it
 needs no changes for that.
+
+## MCP server
+
+`review-intel-mcp` serves the data over the [Model Context Protocol](https://modelcontextprotocol.io)
+with the official Python SDK (`MCPServer`, the SDK 2.x name for FastMCP), over stdio by default
+or streamable HTTP (`--transport streamable-http --port 8000`).
+
+| Kind | Name | What it does |
+|---|---|---|
+| Tool | `top_issues(app, days, limit)` | Top complaint categories in a period, vs the previous period, with example reviews |
+| Tool | `sentiment_trend(app, days, bucket)` | Positive / neutral / negative and average rating per day or week |
+| Tool | `compare_versions(app, version_a, version_b)` | Category shares with z-scores, rating, sentiment and patch notes for two versions |
+| Tool | `search_reviews(app, query, category?, version?, limit)` | Semantic search with optional filters |
+| Tool | `ask(app, question)` | Cited answer from `rag.ask` (calls Claude, ~$0.014) |
+| Resource | `reviews://{app}/{review_id}` | One review with its classification |
+| Resource | `reports://{app}/latest` | Latest weekly report |
+| Resource | `taxonomy://categories` | Category definitions |
+| Prompt | `weekly_report(app)`, `triage_bugs(app, days)` | Step-by-step instructions that use the tools |
+
+All tools except `ask` are read-only and free. They wrap one query layer
+([`insights.py`](src/review_intel/insights.py)), so every number a client model sees comes from
+SQL. Results are typed (structured output). Review text in results is marked as untrusted, and
+the server instructions tell the client model not to follow instructions inside it. The embedding
+model loads in the background at startup, so the first search doesn't wait for it.
+
+**Claude Code:** the repo ships a project-scoped [`.mcp.json`](.mcp.json), so a Claude Code
+session opened in this folder offers the `review-intel` server; approve it once. To add it
+elsewhere:
+
+```bash
+claude mcp add --transport stdio review-intel -- uv run --directory /path/to/player-review-intelligence review-intel-mcp
+```
+
+**Claude Desktop:** add this to `claude_desktop_config.json` (Settings > Developer > Edit Config),
+then restart the app:
+
+```json
+{
+  "mcpServers": {
+    "review-intel": {
+      "command": "uv",
+      "args": ["run", "--directory", "C:\\path\\to\\player-review-intelligence", "review-intel-mcp"]
+    }
+  }
+}
+```
+
+**MCP Inspector:** use the interactive UI, or `--cli` for scripted checks:
+
+```bash
+npx @modelcontextprotocol/inspector uv run review-intel-mcp
+npx @modelcontextprotocol/inspector --cli uv run review-intel-mcp --method tools/list
+```
+
+Then ask, for example: *"What are the top 3 issues in critical-strike this week?"*
 
 ## Development
 
