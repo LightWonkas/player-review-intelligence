@@ -8,6 +8,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "google-play-scraper>=1.2.7,<2",
+    "httpx>=0.28",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "pyyaml>=6.0.3",
@@ -50,8 +52,13 @@ select = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# google-play-scraper ships no type hints; we type its output at our boundary instead.
+module = ["google_play_scraper", "google_play_scraper.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
