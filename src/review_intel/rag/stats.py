@@ -2,10 +2,11 @@
 never from the model."""
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from review_intel.db.models import App, Classification, Review
@@ -54,7 +55,11 @@ def classified_reviews(
     model: str,
     prompt_version: str,
     store: Store | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    versions: Sequence[str] | None = None,
 ) -> list[ClassifiedReview]:
+    """Classified reviews of one game, filtered in SQL: [start, end) and/or versions."""
     query = (
         select(Review, App.store, Classification)
         .join(App, Review.app_id == App.id)
@@ -68,6 +73,12 @@ def classified_reviews(
     )
     if store is not None:
         query = query.where(App.store == store)
+    if start is not None:
+        query = query.where(Review.review_date >= start)
+    if end is not None:
+        query = query.where(Review.review_date < end)
+    if versions is not None:
+        query = query.where(Review.app_version.in_(list(versions)))
     return [
         ClassifiedReview(
             review_id=review.id,
@@ -105,21 +116,35 @@ def counts_by_version(reviews: list[ClassifiedReview]) -> list[VersionCounts]:
 
 def coverage(session: Session, slug: str, *, model: str, prompt_version: str) -> list[Coverage]:
     """What the data covers per store, so answers can say what they can't see."""
-    result = []
-    for store in Store:
-        dates = list(
-            session.scalars(
-                select(Review.review_date)
-                .join(App, Review.app_id == App.id)
-                .where(App.slug == slug, App.store == store)
-            )
+    totals = session.execute(
+        select(
+            App.store,
+            func.count(Review.id),
+            func.min(Review.review_date),
+            func.max(Review.review_date),
         )
-        if not dates:
-            continue
-        classified = len(
-            classified_reviews(
-                session, slug, model=model, prompt_version=prompt_version, store=store
+        .join(App, Review.app_id == App.id)
+        .where(App.slug == slug)
+        .group_by(App.store)
+    ).all()
+    classified = {
+        store: count
+        for store, count in session.execute(
+            select(App.store, func.count(Classification.id))
+            .join(Review, Classification.review_id == Review.id)
+            .join(App, Review.app_id == App.id)
+            .where(
+                App.slug == slug,
+                Classification.model == model,
+                Classification.prompt_version == prompt_version,
             )
+            .group_by(App.store)
         )
-        result.append(Coverage(store, len(dates), classified, min(dates).date(), max(dates).date()))
-    return result
+    }
+    found = {store: (n, first, last) for store, n, first, last in totals}
+    return [
+        Coverage(store, n, classified.get(store, 0), first.date(), last.date())
+        for store in Store
+        if store in found
+        for n, first, last in [found[store]]
+    ]

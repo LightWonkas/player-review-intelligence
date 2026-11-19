@@ -13,12 +13,12 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from review_intel.db.models import App, Classification, Review
 from review_intel.domain import Sentiment, Store
-from review_intel.patch_notes import note_in_force, notes_for_game
+from review_intel.patch_notes import note_in_force, notes_for_game, version_key
 from review_intel.rag.embedder import Embedder
 from review_intel.rag.index import REVIEW, search
 from review_intel.rag.spikes import two_proportion_z
@@ -57,10 +57,24 @@ def _worst_first(reviews: Iterable[ClassifiedReview]) -> list[ClassifiedReview]:
     return sorted(reviews, key=lambda r: (-r.severity, r.rating, -r.review_id))
 
 
-def _in_window(
-    reviews: Iterable[ClassifiedReview], start: datetime, end: datetime
-) -> list[ClassifiedReview]:
-    return [r for r in reviews if start <= r.review_date < end]
+def _primary_counts(
+    session: Session, slug: str, model: str, prompt_version: str, start: datetime, end: datetime
+) -> Counter[str]:
+    """Classified reviews per primary category in [start, end), counted in SQL."""
+    rows = session.execute(
+        select(Classification.primary_category, func.count(Classification.id))
+        .join(Review, Classification.review_id == Review.id)
+        .join(App, Review.app_id == App.id)
+        .where(
+            App.slug == slug,
+            Classification.model == model,
+            Classification.prompt_version == prompt_version,
+            Review.review_date >= start,
+            Review.review_date < end,
+        )
+        .group_by(Classification.primary_category)
+    ).all()
+    return Counter({category: count for category, count in rows})
 
 
 def _count_reviews(session: Session, slug: str, start: datetime, end: datetime) -> int:
@@ -119,9 +133,10 @@ def top_issues(
     end = now or datetime.now(UTC)
     start = end - timedelta(days=days)
     previous_start = start - timedelta(days=days)
-    reviews = classified_reviews(session, slug, model=model, prompt_version=prompt_version)
-    current = _in_window(reviews, start, end)
-    previous = Counter(r.primary_category for r in _in_window(reviews, previous_start, start))
+    current = classified_reviews(
+        session, slug, model=model, prompt_version=prompt_version, start=start, end=end
+    )
+    previous = _primary_counts(session, slug, model, prompt_version, previous_start, start)
 
     by_category: dict[str, list[ClassifiedReview]] = {}
     for review in current:
@@ -187,6 +202,23 @@ class VersionComparison(BaseModel):
     examples_b: dict[str, list[Example]]  # worst reviews in b for the 3 biggest increases
 
 
+def _known_versions(session: Session, slug: str, model: str, prompt_version: str) -> list[str]:
+    """Versions that have classified reviews, newest first."""
+    versions = session.scalars(
+        select(Review.app_version)
+        .distinct()
+        .join(App, Review.app_id == App.id)
+        .join(Classification, Classification.review_id == Review.id)
+        .where(
+            App.slug == slug,
+            Classification.model == model,
+            Classification.prompt_version == prompt_version,
+            Review.app_version.is_not(None),
+        )
+    )
+    return sorted((v for v in versions if v), key=version_key, reverse=True)
+
+
 def _version_summary(
     version: str, reviews: Sequence[ClassifiedReview], note: PatchNoteInfo | None
 ) -> VersionSummary:
@@ -212,11 +244,17 @@ def compare_versions(
     prompt_version: str,
 ) -> VersionComparison:
     """Category shares (reviews mentioning each category), rating and sentiment, a vs b."""
-    reviews = classified_reviews(session, slug, model=model, prompt_version=prompt_version)
+    reviews = classified_reviews(
+        session,
+        slug,
+        model=model,
+        prompt_version=prompt_version,
+        versions=[version_a, version_b],
+    )
     groups = {v: [r for r in reviews if r.version == v] for v in (version_a, version_b)}
     missing = [v for v, items in groups.items() if not items]
     if missing:
-        known = sorted({r.version for r in reviews if r.version}, reverse=True)[:15]
+        known = _known_versions(session, slug, model, prompt_version)[:15]
         raise InsightError(
             f"No classified reviews for version(s) {', '.join(missing)}. "
             f"Versions with data include: {', '.join(known)}"
@@ -302,8 +340,8 @@ def sentiment_trend(
     """Sentiment counts per day or ISO week (Monday start); empty buckets are kept."""
     end = now or datetime.now(UTC)
     start = end - timedelta(days=days)
-    reviews = _in_window(
-        classified_reviews(session, slug, model=model, prompt_version=prompt_version), start, end
+    reviews = classified_reviews(
+        session, slug, model=model, prompt_version=prompt_version, start=start, end=end
     )
     grouped: dict[date, list[ClassifiedReview]] = {}
     for review in reviews:
@@ -534,27 +572,48 @@ class PeriodSummary(BaseModel):
 def _period_stats(
     session: Session,
     slug: str,
-    classified: Sequence[ClassifiedReview],
+    model: str,
+    prompt_version: str,
     start: datetime,
     end: datetime,
 ) -> PeriodStats:
-    rows = session.execute(
-        select(Review.rating, App.store)
+    """All aggregates in SQL: one row per store for reviews, one per sentiment for labels."""
+    in_period = (App.slug == slug, Review.review_date >= start, Review.review_date < end)
+    stores = session.execute(
+        select(App.store, func.count(Review.id), func.sum(Review.rating))
         .join(App, Review.app_id == App.id)
-        .where(App.slug == slug, Review.review_date >= start, Review.review_date < end)
+        .where(*in_period)
+        .group_by(App.store)
     ).all()
-    labelled = _in_window(classified, start, end)
-    sentiments = Counter(r.sentiment.value for r in labelled)
+    labels = session.execute(
+        select(
+            Classification.sentiment,
+            func.count(Classification.id),
+            func.sum(case((Classification.is_bug_report, 1), else_=0)),
+        )
+        .join(Review, Classification.review_id == Review.id)
+        .join(App, Review.app_id == App.id)
+        .where(
+            *in_period,
+            Classification.model == model,
+            Classification.prompt_version == prompt_version,
+        )
+        .group_by(Classification.sentiment)
+    ).all()
+    reviews = sum(count for _, count, _ in stores)
+    rating_sum = sum(total or 0 for _, _, total in stores)
+    classified = sum(count for _, count, _ in labels)
+    sentiments = {sentiment.value: count for sentiment, count, _ in labels}
     return PeriodStats(
-        reviews=len(rows),
-        classified=len(labelled),
-        by_store=dict(Counter(store.value for _, store in rows)),
-        avg_rating=round(sum(rating for rating, _ in rows) / len(rows), 2) if rows else None,
+        reviews=reviews,
+        classified=classified,
+        by_store={store.value: count for store, count, _ in stores},
+        avg_rating=round(rating_sum / reviews, 2) if reviews else None,
         sentiment_share={
-            s.value: round(sentiments[s.value] / len(labelled), 4) if labelled else 0.0
+            s.value: round(sentiments.get(s.value, 0) / classified, 4) if classified else 0.0
             for s in Sentiment
         },
-        bug_reports=sum(r.is_bug_report for r in labelled),
+        bug_reports=sum(bugs or 0 for _, _, bugs in labels),
     )
 
 
@@ -569,13 +628,13 @@ def period_summary(
 ) -> PeriodSummary:
     end = now or datetime.now(UTC)
     start = end - timedelta(days=days)
-    classified = classified_reviews(session, slug, model=model, prompt_version=prompt_version)
+    previous_start = start - timedelta(days=days)
     return PeriodSummary(
         app=slug,
         period_start=start,
         period_end=end,
-        current=_period_stats(session, slug, classified, start, end),
-        previous=_period_stats(session, slug, classified, start - timedelta(days=days), start),
+        current=_period_stats(session, slug, model, prompt_version, start, end),
+        previous=_period_stats(session, slug, model, prompt_version, previous_start, start),
     )
 
 
@@ -604,17 +663,15 @@ def category_breakdown(
 ) -> CategoryBreakdown:
     end = now or datetime.now(UTC)
     start = end - timedelta(days=days)
-    reviews = _in_window(
-        classified_reviews(session, slug, model=model, prompt_version=prompt_version), start, end
-    )
-    counts = Counter(r.primary_category for r in reviews)
+    counts = _primary_counts(session, slug, model, prompt_version, start, end)
+    total = sum(counts.values())
     return CategoryBreakdown(
         app=slug,
         period_start=start,
         period_end=end,
-        classified=len(reviews),
+        classified=total,
         categories=[
-            CategoryCount(category=c, reviews=n, share=round(n / len(reviews), 4))
+            CategoryCount(category=c, reviews=n, share=round(n / total, 4))
             for c, n in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
         ],
     )
