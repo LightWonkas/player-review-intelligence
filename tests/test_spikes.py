@@ -4,7 +4,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from review_intel.domain import Store
-from review_intel.rag.spikes import SpikeSettings, detect_spikes, two_proportion_z
+from review_intel.rag.spikes import (
+    SpikeSettings,
+    detect_spikes,
+    near_misses,
+    two_proportion_z,
+)
 
 from .fake_embedder import FakeEmbedder
 from .rag_data import MODEL, PROMPT, SLUG, Seeder
@@ -93,3 +98,15 @@ def test_without_embedder_the_note_is_linked_but_lines_are_not_ranked(
 
     assert spike.note_version == "1.0"  # the note in force for 1.1
     assert spike.note_lines == []
+
+
+def test_near_misses_show_increases_below_the_thresholds(
+    session: Session, apps_config_path: Path
+) -> None:
+    seed = Seeder(session, apps_config_path)
+    _seed_versions(seed, Store.GOOGLE_PLAY, ads_before=2, ads_after=5, after_categories=("ads",))
+
+    assert detect_spikes(session, SLUG, model=MODEL, prompt_version=PROMPT) == []
+    (miss,) = near_misses(session, SLUG, model=MODEL, prompt_version=PROMPT)
+    assert (miss.category, miss.after_count, miss.before_count) == ("ads", 5, 2)
+    assert miss.z < 2.0

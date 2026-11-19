@@ -67,7 +67,7 @@ from review_intel.patch_notes import (
 from review_intel.rag.ask import answer_question, build_context, render_context
 from review_intel.rag.embedder import Embedder, SentenceTransformerEmbedder
 from review_intel.rag.index import IndexMissingError, index_game
-from review_intel.rag.spikes import SpikeSettings, detect_spikes
+from review_intel.rag.spikes import Spike, SpikeSettings, detect_spikes, near_misses
 from review_intel.settings import get_settings
 
 app = typer.Typer(
@@ -604,26 +604,41 @@ def spikes(
     engine, config, _ = _prepare_db(database_url, apps_config)
     _get_game(engine, config, app_slug)
     embedder = make_embedder(settings.embedding_model) if link_lines else None
+    spike_settings = SpikeSettings(min_reviews=min_reviews, min_increase=min_increase)
+    version = _current_prompt_version()
     with make_session_factory(engine)() as session:
         found = detect_spikes(
             session,
             app_slug,
             model=settings.classify_model,
-            prompt_version=_current_prompt_version(),
-            settings=SpikeSettings(min_reviews=min_reviews, min_increase=min_increase),
+            prompt_version=version,
+            settings=spike_settings,
             embedder=embedder,
+        )
+        closest = (
+            []
+            if found
+            else near_misses(
+                session,
+                app_slug,
+                model=settings.classify_model,
+                prompt_version=version,
+                settings=spike_settings,
+            )
         )
     engine.dispose()
     if not found:
-        typer.echo("No spikes found.")
+        typer.echo(
+            f"No significant spikes (needs +{spike_settings.min_increase:.0%} points, "
+            f"z >= {spike_settings.min_z}, {spike_settings.min_reviews}+ reviews per side)."
+        )
+        if closest:
+            typer.echo("Closest candidates, NOT significant:")
+            for spike in closest:
+                typer.echo(f"  {_describe_spike(spike)}")
         return
     for spike in found:
-        typer.echo(
-            f"{spike.store.value} v{spike.version}: {spike.category} "
-            f"{spike.before_share:.0%} -> {spike.after_share:.0%} "
-            f"({spike.after_count}/{spike.after_n} vs {spike.before_count}/{spike.before_n} "
-            f"in v{', v'.join(spike.baseline_versions)}; z={spike.z:.1f})"
-        )
+        typer.echo(_describe_spike(spike))
         if spike.note_version:
             typer.echo(f"  patch note in force: v{spike.note_version} ({spike.note_date})")
             for line, similarity in spike.note_lines:
@@ -631,3 +646,12 @@ def spikes(
         else:
             typer.echo("  no patch note for this version")
         typer.echo("  examples: " + ", ".join(f"r{i}" for i in spike.example_review_ids))
+
+
+def _describe_spike(spike: Spike) -> str:
+    return (
+        f"{spike.store.value} v{spike.version}: {spike.category} "
+        f"{spike.before_share:.0%} -> {spike.after_share:.0%} "
+        f"({spike.after_count}/{spike.after_n} vs {spike.before_count}/{spike.before_n} "
+        f"in v{', v'.join(spike.baseline_versions)}; z={spike.z:.1f})"
+    )

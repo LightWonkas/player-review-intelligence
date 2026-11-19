@@ -184,3 +184,33 @@ def detect_spikes(
                 )
             )
     return sorted(found, key=lambda spike: spike.z, reverse=True)
+
+
+def near_misses(
+    session: Session,
+    slug: str,
+    *,
+    model: str,
+    prompt_version: str,
+    settings: SpikeSettings | None = None,
+    top: int = 3,
+) -> list[Spike]:
+    """The strongest increases that did not pass the thresholds.
+
+    With ~20 reviews per version, real but modest shifts rarely reach significance;
+    showing the closest candidates (clearly labeled) says how close the data came,
+    instead of a bare "no spikes".
+    """
+    settings = settings or SpikeSettings()
+    relaxed = replace(settings, min_z=0.0, min_increase=0.05, min_count=3)
+    candidates = detect_spikes(
+        session, slug, model=model, prompt_version=prompt_version, settings=relaxed
+    )
+    passed = [
+        spike
+        for spike in candidates
+        if spike.z >= settings.min_z
+        and spike.after_share - spike.before_share >= settings.min_increase
+        and spike.after_count >= settings.min_count
+    ]
+    return [spike for spike in candidates if spike not in passed][:top]

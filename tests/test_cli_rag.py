@@ -55,7 +55,7 @@ def test_import_index_ask_and_spikes(
 
     spikes = runner.invoke(app, ["spikes", *common])
     assert spikes.exit_code == 0, spikes.output
-    assert "No spikes found." in spikes.output  # nothing is classified in this test
+    assert "No significant spikes" in spikes.output  # nothing is classified in this test
 
 
 def test_ask_before_index_says_what_to_run(
