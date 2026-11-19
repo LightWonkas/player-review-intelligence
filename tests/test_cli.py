@@ -227,3 +227,33 @@ def test_eval_without_labels_explains_what_to_do(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "review-intel label" in result.output
+
+
+def test_classify_dry_run_counts_and_estimates_without_calling_claude(
+    db_url: str, apps_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("review_intel.cli.build_sources", _fake_sources)
+
+    def no_client(_settings: object) -> None:
+        raise AssertionError("dry run must not create a client")
+
+    monkeypatch.setattr("review_intel.cli.make_client", no_client)
+    runner.invoke(app, _fetch_args(db_url, apps_config_path))
+
+    result = runner.invoke(
+        app,
+        [
+            "classify",
+            "--app",
+            "critical-strike",
+            "--dry-run",
+            "--database-url",
+            db_url,
+            "--apps-config",
+            str(apps_config_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Would classify 3 reviews with claude-haiku-5-5" in result.output
+    assert "with --batch" in result.output

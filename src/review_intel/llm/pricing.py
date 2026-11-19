@@ -65,3 +65,22 @@ class UsageTotals:
             f"output {self.output_tokens:,} | est. cost {cost_text}"
             + (" (batch -50%)" if batch else "")
         )
+
+
+# Measured per review on real data (README, "Cost"): the cached prefix is read once per
+# request, and each review adds its own input and output tokens.
+TYPICAL_CLASSIFY_TOKENS = {"input": 300, "output": 210, "cache_read": 1_900}
+
+
+def estimate_classification_cost(reviews: int, model: str, *, batch: bool = False) -> float | None:
+    """Rough cost of classifying `reviews` reviews, for asking before a run."""
+    price = PRICES.get(model)
+    if price is None:
+        return None
+    per_review = (
+        TYPICAL_CLASSIFY_TOKENS["input"] * price.input
+        + TYPICAL_CLASSIFY_TOKENS["output"] * price.output
+        + TYPICAL_CLASSIFY_TOKENS["cache_read"] * price.cache_read
+    ) / 1_000_000
+    total = reviews * per_review
+    return total * BATCH_DISCOUNT if batch else total

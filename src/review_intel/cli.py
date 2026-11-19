@@ -56,7 +56,7 @@ from review_intel.evals.runner import (
 )
 from review_intel.ingest import fetch_and_store
 from review_intel.llm.client import make_client
-from review_intel.llm.pricing import UsageTotals
+from review_intel.llm.pricing import UsageTotals, estimate_classification_cost
 from review_intel.llm.prompts import prompt_version
 from review_intel.llm.taxonomy import load_taxonomy
 from review_intel.patch_notes import (
@@ -201,6 +201,9 @@ def classify(
     resume: Annotated[
         str | None, typer.Option(help="Collect an earlier batch by id instead of submitting.")
     ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Only count the reviews and estimate the cost.")
+    ] = False,
     database_url: DatabaseUrlOption = None,
     apps_config: AppsConfigOption = None,
 ) -> None:
@@ -209,6 +212,26 @@ def classify(
     engine, config, _ = _prepare_db(database_url, apps_config)
     _get_game(engine, config, app_slug)
     factory = make_session_factory(engine)
+    if dry_run:
+        # No API call and no key needed: lets scripts and skills ask before spending.
+        version = _current_prompt_version()
+        with factory() as session:
+            count = len(
+                select_unclassified(session, app_slug, version, settings.classify_model, limit)
+            )
+        engine.dispose()
+        sync = estimate_classification_cost(count, settings.classify_model)
+        batch_cost = estimate_classification_cost(count, settings.classify_model, batch=True)
+        estimate = (
+            f"about ${sync:.4f} sync or ${batch_cost:.4f} with --batch"
+            if sync is not None and batch_cost is not None
+            else "cost unknown (model not in the price table)"
+        )
+        typer.echo(
+            f"Would classify {count} reviews with {settings.classify_model} "
+            f"(prompt {version}): {estimate}"
+        )
+        return
     try:
         classifier = Classifier(
             make_client(settings), settings.classify_model, load_taxonomy(settings.taxonomy_path)

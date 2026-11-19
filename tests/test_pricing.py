@@ -36,3 +36,14 @@ def test_haiku_cost_uses_each_token_type_rate() -> None:
 
 def test_unknown_model_has_no_price() -> None:
     assert UsageTotals().cost_usd("some-future-model") is None
+
+
+def test_classification_estimate_matches_measured_cost_per_thousand() -> None:
+    from review_intel.llm.pricing import estimate_classification_cost
+
+    sync = estimate_classification_cost(1000, "claude-haiku-5-5")
+    batch = estimate_classification_cost(1000, "claude-haiku-5-5", batch=True)
+
+    assert sync is not None and 0.12 < sync < 0.20  # README: ~$0.17 per 1k, sync
+    assert batch == pytest.approx(sync / 2)
+    assert estimate_classification_cost(10, "unknown-model") is None
