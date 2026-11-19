@@ -4,7 +4,7 @@ An AI agent system that collects public app-store reviews for mobile games, clas
 
 Games are configured in [`config/apps.yaml`](config/apps.yaml) (Google Play + App Store); adding one needs no code changes.
 
-> Status: **M6 (MCP server)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
+> Status: **M7 (weekly report and dashboard)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
 
 ## Quickstart
 
@@ -107,6 +107,36 @@ With ~20 classified App Store reviews per version and only about five weeks of G
 history, the current data has no significant spikes. The closest candidate is a weapon-balance
 increase on Google Play from 3% to 8% (z = 1.8). More history makes the detector useful; it
 needs no changes for that.
+
+## Weekly report and dashboard
+
+```bash
+uv run review-intel report --app critical-strike --days 7   # ~$0.03, writes data/reports/*.md
+uv run review-intel dashboard                                # http://127.0.0.1:8765
+```
+
+The report's layout is fixed and code fills in every number: headline numbers against the
+previous period, top issues with quotes, version spikes (or the closest non-significant
+candidates, labeled as such), a four-week sentiment table, and 3-5 prioritized action items for
+dev, product and marketing. `claude-sonnet-5-5` writes only the prose (summary, what players say,
+actions, caveats) as structured output, and code then checks it:
+
+- Every number in the prose must appear in the facts the model was given. If one doesn't, the
+  model gets one retry with the offending numbers listed.
+- Review ids and categories that weren't in the facts are dropped.
+- A separate judge call scores the prose for faithfulness, and the score goes in the footer.
+  The system prompt asks for claims sized to their evidence ("one player says", not
+  "players say"). On real data that raised the judge score from 2/5 to 4/5.
+
+Review text in quotes is flattened, HTML-escaped and markdown-escaped. Reports are saved to the
+`reports` table (served as `reports://{app}/latest` over MCP) and to `data/reports/`.
+`--post-slack` also sends a short version to `SLACK_WEBHOOK_URL`.
+
+The dashboard is FastAPI and Jinja2 with server-side SVG charts and no JavaScript. It shows
+7-day stat tiles, the week's top issues, reviews by category (7/30/90 days), weekly sentiment,
+and the latest report. Every chart has a table view, and light and dark color palettes were
+checked for color-vision deficiency. The same data is available as JSON under `/api/apps/{app}/...`
+(docs at `/api/docs`). It listens on localhost and is read-only.
 
 ## MCP server
 
