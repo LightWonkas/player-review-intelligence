@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///data/review_intel.db"
     classify_model: str = "claude-haiku-5-5"
     report_model: str = "claude-sonnet-5-5"
+    # A stronger model than the classifier, so no model grades its own output.
+    judge_model: str = "claude-sonnet-5-5"
     apps_config_path: Path = Path("config/apps.yaml")
     taxonomy_path: Path = Path("config/taxonomy.yaml")
 

@@ -158,3 +158,45 @@ def errored_result(custom_id: str) -> dict[str, Any]:
             },
         },
     }
+
+
+class FakeParsedResponse:
+    """The parts of a parsed beta message the judge reads."""
+
+    def __init__(self, parsed_output: Any, stop_reason: str = "end_turn") -> None:
+        self.parsed_output = parsed_output
+        self.stop_reason = stop_reason
+        self.usage = Message.model_validate(
+            {
+                "id": "m",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-5-5",
+                "content": [],
+                "stop_reason": stop_reason,
+                "stop_sequence": None,
+                "usage": _usage(input_tokens=400, output_tokens=80, cache_read=0),
+            }
+        ).usage
+
+
+class FakeBetaMessages:
+    def __init__(self, parse_responder: Callable[[dict[str, Any]], Any]) -> None:
+        self._responder = parse_responder
+        self.parse_calls: list[dict[str, Any]] = []
+
+    def parse(self, **params: Any) -> Any:
+        self.parse_calls.append(params)
+        return self._responder(params)
+
+
+class FakeBeta:
+    def __init__(self, parse_responder: Callable[[dict[str, Any]], Any]) -> None:
+        self.messages = FakeBetaMessages(parse_responder)
+
+
+def with_judge(
+    fake: FakeAnthropic, parse_responder: Callable[[dict[str, Any]], Any]
+) -> FakeAnthropic:
+    fake.beta = FakeBeta(parse_responder)  # type: ignore[attr-defined]
+    return fake
