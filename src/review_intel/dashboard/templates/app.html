@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ game_name }} · Player Review Intelligence</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+<main class="viz-root">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Player Review Intelligence</p>
+      <h1>{{ game_name }}</h1>
+      <p class="muted">Public Google Play and App Store reviews · updated {{ now.strftime("%Y-%m-%d %H:%M") }} UTC</p>
+    </div>
+    {% if games|length > 1 %}
+    <nav class="games" aria-label="Games">
+      {% for game_slug, game in games.items() %}
+      <a href="/apps/{{ game_slug }}" {% if game_slug == slug %}aria-current="page"{% endif %}>{{ game.name }}</a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+  </header>
+
+  <section class="tiles" aria-label="Last 7 days">
+    {% for tile in tiles %}
+    <div class="tile">
+      <p class="tile-label">{{ tile.label }}</p>
+      <p class="tile-value">{{ tile.value }}</p>
+      <p class="tile-delta delta-{{ tile.tone }}">{{ tile.delta }}</p>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>Top issues, last 7 days</h2>
+    {% if issues.issues %}
+    <table>
+      <thead><tr><th>Issue</th><th class="num">Reviews</th><th class="num">Share</th><th class="num">Previous 7 days</th><th class="num">Avg severity</th><th>Example</th></tr></thead>
+      <tbody>
+      {% for issue in issues.issues %}
+      <tr>
+        <td>{{ labels.get(issue.category, issue.category) }}</td>
+        <td class="num">{{ issue.reviews }}</td>
+        <td class="num">{{ "%.0f"|format(issue.share * 100) }}%</td>
+        <td class="num">{{ issue.previous_reviews }}</td>
+        <td class="num">{{ "%.1f"|format(issue.avg_severity) }}</td>
+        <td class="example">{% if issue.examples %}{{ issue.examples[0].summary }} <span class="muted">(review {{ issue.examples[0].review_id }})</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted small">{{ issues.classified_reviews }} classified reviews in the period{% if issues.unclassified_reviews %}, {{ issues.unclassified_reviews }} not yet classified{% endif %}. Praise and "other" are not counted as issues.</p>
+    {% else %}
+    <p class="muted">No complaint categories in the last 7 days.</p>
+    {% endif %}
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-head">
+        <h2>Reviews by category</h2>
+        <nav class="filters" aria-label="Period">
+          {% for option in [7, 30, 90] %}
+          <a href="?days={{ option }}" {% if option == days %}aria-current="true"{% endif %}>{{ option }} days</a>
+          {% endfor %}
+        </nav>
+      </div>
+      <p class="muted small">Primary category of {{ categories.classified }} classified reviews, last {{ days }} days</p>
+      {{ category_chart }}
+      <details>
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>Category</th><th class="num">Reviews</th><th class="num">Share</th></tr></thead>
+          <tbody>
+          {% for item in categories.categories %}
+          <tr><td>{{ labels.get(item.category, item.category) }}</td><td class="num">{{ item.reviews }}</td><td class="num">{{ "%.1f"|format(item.share * 100) }}%</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Sentiment by week</h2>
+      <p class="muted small">Classified reviews per week (Monday start), last {{ trend.points|length }} weeks</p>
+      <ul class="legend" aria-label="Legend">
+        <li><span class="swatch positive"></span>Positive</li>
+        <li><span class="swatch neutral"></span>Neutral</li>
+        <li><span class="swatch negative"></span>Negative</li>
+      </ul>
+      {{ trend_chart }}
+      <details>
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>Week of</th><th class="num">Reviews</th><th class="num">Positive</th><th class="num">Neutral</th><th class="num">Negative</th><th class="num">Avg rating</th></tr></thead>
+          <tbody>
+          {% for p in trend.points %}
+          <tr><td>{{ p.start }}</td><td class="num">{{ p.reviews }}</td><td class="num">{{ p.positive }}</td><td class="num">{{ p.neutral }}</td><td class="num">{{ p.negative }}</td><td class="num">{{ p.avg_rating if p.avg_rating is not none else "-" }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </section>
+  </div>
+
+  <section class="card report">
+    <h2>Latest report</h2>
+    {% if report %}
+    <p class="muted small">{{ report.period_start }} to {{ report.period_end }} · generated {{ report.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</p>
+    <article class="markdown">{{ report_html }}</article>
+    {% else %}
+    <p class="muted">No report yet. Run <code>uv run review-intel report --app {{ slug }}</code>.</p>
+    {% endif %}
+  </section>
+
+  <footer class="muted small">
+    Numbers come from the review database. JSON: <a href="/api/apps/{{ slug }}/top-issues">top issues</a>,
+    <a href="/api/apps/{{ slug }}/categories">categories</a>, <a href="/api/apps/{{ slug }}/sentiment">sentiment</a>,
+    <a href="/api/docs">API docs</a>.
+  </footer>
+</main>
+</body>
+</html>
