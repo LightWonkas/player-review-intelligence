@@ -15,6 +15,7 @@ from review_intel.evals.runner import (
     README_START,
     evaluate,
     format_report,
+    judge_source,
     load_reports,
     predict,
     previous_report,
@@ -215,3 +216,10 @@ def test_judge_api_error_is_counted_not_raised(tmp_path: Path) -> None:
 
     assert judged.errors == 3
     assert judged.mean_score == 0.0
+
+
+def test_judge_source_includes_the_rating_the_classifier_saw() -> None:
+    with_title = _label(1, "ads").model_copy(update={"title": "Too many ads"})
+
+    assert judge_source(_label(1, "ads")) == "Rating: 2/5 stars\nads review 1"
+    assert judge_source(with_title) == "Rating: 2/5 stars\nTitle: Too many ads\nads review 1"

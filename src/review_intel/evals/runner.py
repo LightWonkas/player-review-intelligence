@@ -147,6 +147,16 @@ class JudgeScores:
     low_scores: list[dict[str, Any]] = field(default_factory=list)
 
 
+def judge_source(label: LabeledReview) -> str:
+    """The review as the classifier saw it: without the star rating the judge would mark
+    a correct "rated it 1 star" as an invented claim."""
+    lines = [f"Rating: {label.rating}/5 stars"]
+    if label.title:
+        lines.append(f"Title: {label.title}")
+    lines.append(label.body)
+    return "\n".join(lines)
+
+
 def run_judge(
     client: anthropic.Anthropic,
     judge_model: str,
@@ -167,8 +177,7 @@ def run_judge(
 
     def judge(label: LabeledReview) -> tuple[LabeledReview, Any]:
         summary = predictions[label.key].short_summary or ""
-        source = f"{label.title}\n{label.body}" if label.title else label.body
-        return label, judge_summary(client, judge_model, summary, [source])
+        return label, judge_summary(client, judge_model, summary, [judge_source(label)])
 
     scores: list[int] = []
     low: list[dict[str, Any]] = []
