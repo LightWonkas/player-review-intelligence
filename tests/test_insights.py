@@ -5,6 +5,7 @@ from typing import TypedDict
 import pytest
 from sqlalchemy.orm import Session
 
+from review_intel.db.models import Review
 from review_intel.domain import Store
 from review_intel.insights import (
     InsightError,
@@ -129,3 +130,17 @@ def test_review_detail(seed: Seeder) -> None:
     assert detail is not None and detail.store is Store.APP_STORE
     assert detail.classification is not None and detail.classification.primary_category == "other"
     assert missing is None
+
+
+def test_search_skips_reviews_deleted_since_indexing(seed: Seeder) -> None:
+    index_game(seed.session, SLUG, FakeEmbedder())
+    gone = search_reviews(seed.session, SLUG, "crash", FakeEmbedder(), limit=1, **SCOPE).results[0]
+    review = seed.session.get(Review, gone.review_id)
+    assert review is not None
+    seed.session.delete(review)
+    seed.session.flush()  # deleted, but `index` hasn't run again yet
+
+    result = search_reviews(seed.session, SLUG, "crash", FakeEmbedder(), limit=10, **SCOPE)
+
+    assert gone.review_id not in [hit.review_id for hit in result.results]
+    assert result.results  # the other reviews still come back

@@ -410,6 +410,10 @@ def search_reviews(
     }
     results = []
     for item_id, distance in hits:
+        if item_id not in rows:
+            # The vector index can briefly outlive a deleted review (until the next
+            # `index` run); skip it rather than fail the whole search.
+            continue
         review, store = rows[item_id]
         label = labels.get(item_id)
         text = f"{review.title}\n{review.body}" if review.title else review.body
