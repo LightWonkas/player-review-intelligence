@@ -5,6 +5,7 @@ results. Logic lives in modules that tests (and later the MCP server) call direc
 """
 
 import logging
+import time
 from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
@@ -177,9 +178,13 @@ def classify(
             make_client(settings), settings.classify_model, load_taxonomy(settings.taxonomy_path)
         )
         typer.echo(f"Model {classifier.model} | prompt {classifier.prompt_version}")
+        started = time.monotonic()
         summary = _run_classification(
             classifier, factory, app_slug, limit, concurrency, batch, resume
         )
+        if summary is not None:
+            # Wall-clock for the whole command, including time spent waiting on a batch.
+            summary.seconds = time.monotonic() - started
     except anthropic.AuthenticationError as exc:
         engine.dispose()
         typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
