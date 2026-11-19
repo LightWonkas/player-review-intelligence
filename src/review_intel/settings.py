@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     # Local sentence-transformers model for RAG. English-focused; for many non-English
     # reviews, sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 is a drop-in.
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Optional: `report --post-slack` sends a short version here. A secret: .env only.
+    slack_webhook_url: SecretStr | None = None
     apps_config_path: Path = Path("config/apps.yaml")
     taxonomy_path: Path = Path("config/taxonomy.yaml")
 
