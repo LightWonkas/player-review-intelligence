@@ -2,7 +2,7 @@
 
 An AI agent system that collects public app-store reviews for mobile games, classifies them with Claude, connects complaints to game updates with RAG, and exposes everything through an MCP server and a weekly report.
 
-First target: **Critical Strike** by Vertigo Games (Google Play + App Store). Any game can be added in `config/apps.yaml`.
+Games are configured in [`config/apps.yaml`](config/apps.yaml) (Google Play + App Store); adding one needs no code changes.
 
 > Status: **M3 (classification with Claude)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
 
@@ -36,7 +36,7 @@ review cannot inject instructions.
 creates a new version and old results stay comparable. `classify` only processes reviews that have
 no result for the current prompt version and model.
 
-### Cost (measured, Critical Strike, November 2026)
+### Cost (measured on real reviews, November 2026)
 
 | Run | Reviews | Est. cost | Per 1,000 reviews |
 |---|---:|---:|---:|
