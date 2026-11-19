@@ -19,7 +19,7 @@ from review_intel.db.models import App, Classification, PatchNote, PatchNoteChun
 from review_intel.domain import Store
 from review_intel.evals.judge import FALLBACK_BETA
 from review_intel.llm.prompts import escape_untrusted
-from review_intel.patch_notes import notes_for_game, version_key
+from review_intel.patch_notes import note_in_force, notes_for_game, version_key
 from review_intel.rag.embedder import Embedder
 from review_intel.rag.index import PATCH_CHUNK, REVIEW, review_text, search
 from review_intel.rag.stats import Coverage, classified_reviews, counts_by_version, coverage
@@ -27,6 +27,7 @@ from review_intel.rag.stats import Coverage, classified_reviews, counts_by_versi
 MAX_TOKENS = 2048
 REVIEW_CHARS = 700  # long reviews are cut; the start carries the complaint
 NOT_FOCUS = {"praise", "other"}
+VERSION_NOTES = 2  # notes added for the most common versions among retrieved reviews
 
 SYSTEM = """\
 You answer questions about the player reviews of a mobile game for its development \
@@ -183,6 +184,18 @@ def build_context(
         )
         for note_id in ordered_notes[:k_notes]
     ]
+    # Similar wording alone misses the release the reviews were written on ("what changed
+    # in the latest versions?"), so also add the notes in force for their main versions.
+    game_notes = notes_for_game(session, slug)
+    have = {note.version for note in notes}
+    versions = Counter(review.version for review in reviews if review.version)
+    for version, _ in versions.most_common(VERSION_NOTES):
+        in_force = note_in_force(game_notes, version)
+        if in_force is not None and in_force.version not in have:
+            have.add(in_force.version)
+            notes.append(
+                ContextNote(in_force.version, in_force.release_date.isoformat(), in_force.text)
+            )
 
     focus = [
         category
@@ -191,9 +204,7 @@ def build_context(
         ).most_common(3)
         if category is not None
     ]
-    released = {
-        note.version: note.release_date.isoformat() for note in notes_for_game(session, slug)
-    }
+    released = {note.version: note.release_date.isoformat() for note in game_notes}
     all_classified = classified_reviews(session, slug, model=model, prompt_version=prompt_version)
     timeline = [
         TimelineRow(

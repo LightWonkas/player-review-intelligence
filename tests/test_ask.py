@@ -166,3 +166,20 @@ def test_truncated_answer_is_flagged(seeded: Seeder) -> None:
     result = answer_question(client, "claude-sonnet-5-5", _context(seeded))
 
     assert result.notes == ["answer was cut off at the token limit"]
+
+
+def test_notes_in_force_for_the_retrieved_versions_are_added(seeded: Seeder) -> None:
+    # Nothing about "maps" matches the mercy reviews, but they were written on 15.004,
+    # so the 15.004 note is in the context even when no note line matches the question.
+    context = build_context(
+        seeded.session,
+        SLUG,
+        "mercy gun",
+        FakeEmbedder(),
+        model=MODEL,
+        prompt_version=PROMPT,
+        k_reviews=2,
+        k_notes=0,
+    )
+
+    assert [note.version for note in context.notes] == ["15.004"]
