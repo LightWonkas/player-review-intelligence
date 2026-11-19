@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     report_model: str = "claude-sonnet-5-5"
     # A stronger model than the classifier, so no model grades its own output.
     judge_model: str = "claude-sonnet-5-5"
+    # Local sentence-transformers model for RAG. English-focused; for many non-English
+    # reviews, sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 is a drop-in.
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     apps_config_path: Path = Path("config/apps.yaml")
     taxonomy_path: Path = Path("config/taxonomy.yaml")
 
