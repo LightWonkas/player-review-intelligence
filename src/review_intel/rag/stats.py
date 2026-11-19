@@ -26,6 +26,7 @@ class ClassifiedReview:
     primary_category: str
     severity: int
     sentiment: Sentiment
+    summary: str
 
 
 @dataclass
@@ -79,6 +80,7 @@ def classified_reviews(
             primary_category=result.primary_category,
             severity=result.severity,
             sentiment=result.sentiment,
+            summary=result.short_summary,
         )
         for review, app_store, result in session.execute(query)
     ]
