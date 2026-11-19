@@ -11,6 +11,7 @@ dependencies = [
     "anthropic>=2.10,<3",
     "google-play-scraper>=1.2.7,<2",
     "httpx>=0.28",
+    "mcp[cli]>=2.3,<3",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "pyyaml>=6.0.3",
@@ -23,6 +24,7 @@ dependencies = [
 
 [project.scripts]
 review-intel = "review_intel.cli:app"
+review-intel-mcp = "review_intel.mcp_server:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
