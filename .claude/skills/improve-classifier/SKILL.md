@@ -41,4 +41,4 @@ Make one evidence-based change to the classifier. Optional focus: `$ARGUMENTS`.
 
    Do each only on the user's yes.
 
-With 35 test reviews, one review moves accuracy by about 3 points. Call a change under about 5 points noise unless dev agrees.
+With 35 test reviews, one review moves accuracy by about 3 points. The eval prints 95% bootstrap intervals: if the new score sits inside the old interval, call it noise unless dev agrees.

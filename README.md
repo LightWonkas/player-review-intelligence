@@ -112,7 +112,8 @@ human accuracy; `review-intel label` lets a person relabel or extend the set.
 The sample is 40% random (mostly praise, like the real mix) and 60% low-rated reviews with real
 text, where the hard categories are, with at least 25% from the App Store. A hash of each review
 fixes it in a 70/30 dev/test split: prompts are tuned on dev, and the headline number is test.
-With 35 test reviews, one review moves accuracy by about 3 points.
+With 35 test reviews, one review moves accuracy by about 3 points, so every score comes with a
+95% bootstrap interval.
 
 `review-intel eval` reports:
 
@@ -124,12 +125,14 @@ With 35 test reviews, one review moves accuracy by about 3 points.
 Predictions are cached per prompt version, so re-running an unchanged prompt is free.
 
 <!-- eval:start -->
-| Date | Prompt | Model | Test acc | Test macro-F1 | Sentiment acc (all) | Judge |
+| Date | Prompt | Model | Test acc [95% CI] | Test macro-F1 [95% CI] | Sentiment acc (all) | Judge |
 |---|---|---|---:|---:|---:|---:|
-| 2026-11-19 | `v1-10aea4a5` | claude-haiku-5-5 | 0.89 (n=35) | 0.70 | 0.97 | 4.65/5 |
+| 2026-11-19 | `v1-10aea4a5` | claude-haiku-5-5 | 0.89 [0.77-0.97] (n=35) | 0.70 [0.52-0.95] | 0.97 | 4.65/5 |
 <!-- eval:end -->
 
-The weakest spot is the game's own auto-aim, which gets read as cheating
+Read the intervals before the point estimates. Accuracy is solid (0.77-0.97), but macro-F1
+spans 0.52-0.95: categories with 1-3 examples pull the average down, and the set is too small
+to pin down rare categories. The weakest spot is the game's own auto-aim, which gets read as cheating
 (`controls_ux -> cheating_hackers`). The [`improve-classifier`](.claude/skills/improve-classifier/SKILL.md)
 skill is built for exactly this kind of fix.
 
@@ -281,8 +284,10 @@ one report. All the live runs behind this README cost under $1 in total.
 
 ## Limitations and next steps
 
-- **Reference labels come from a stronger model, not people.** A human-labeled set would measure
-  real accuracy (`review-intel label` is ready for it).
+- **Reference labels come from a stronger model, not people, and there are only 100.** Scores
+  measure agreement with Opus, and the macro-F1 interval is wide (0.52-0.95). A larger,
+  human-labeled set with more rare-category examples would measure real accuracy
+  (`review-intel label` is ready for it).
 - **Shallow history.** The App Store feed serves only ~500 recent reviews per country, and
   fetching newest-first covers a few weeks of Google Play. With ~20 reviews per version, spikes
   rarely reach significance. A scheduled weekly fetch would build the history.
@@ -290,15 +295,17 @@ one report. All the live runs behind this README cost under $1 in total.
   multilingual reviews would want a multilingual embedding model (`EMBEDDING_MODEL`).
 - **Judge scores vary.** Scores for the same week ranged from 3/5 to 4/5 between runs. The
   `report-reviewer` subagent is the second check before sharing.
-- **SQLite.** SQL works on Postgres through `DATABASE_URL`, but vector search uses `sqlite-vec`;
-  pgvector would be the move for a shared deployment.
+- **SQLite.** Time windows and counts run as SQL filters and aggregates, but per-version
+  timelines and spikes still read a game's full classified history, and vector search uses
+  `sqlite-vec`. For hundreds of thousands of reviews: Postgres through `DATABASE_URL`, pgvector,
+  and per-version counts in SQL.
 - **Next steps:** human labels, a scheduled pipeline with Slack alerts when a spike becomes
   significant, and more storefronts.
 
 ## Development
 
 ```bash
-uv run pytest                                     # 210 tests, no network, no real LLM
+uv run pytest                                     # 217 tests, no network, no real LLM
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                                       # strict
 uv run python scripts/record_fixtures.py          # re-record store fixtures (by hand)
@@ -306,3 +313,7 @@ uv run scripts/make_demo_gif.py                   # rebuild docs/demo.gif from a
 ```
 
 CI runs ruff, mypy and pytest on every push. The full build plan is in [`docs/SPEC.md`](docs/SPEC.md).
+
+## License
+
+[MIT](LICENSE)
