@@ -3,6 +3,8 @@ name = "review-intel"
 version = "0.1.0"
 description = "AI agent system that turns public app-store reviews into weekly, version-aware insights for game teams."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Emin Özbayraktar", email = "emin.ozbayraktarr@gmail.com" }
 ]
