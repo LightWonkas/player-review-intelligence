@@ -14,7 +14,10 @@ dependencies = [
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "pyyaml>=6.0.3",
+    "sentence-transformers>=6.3,<7",
     "sqlalchemy>=2.1.9",
+    "sqlite-vec>=0.1.9,<0.2",
+    "torch>=2.15",
     "typer>=0.29.2",
 ]
 
@@ -61,6 +64,20 @@ plugins = ["pydantic.mypy"]
 module = ["google_play_scraper", "google_play_scraper.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# sqlite-vec ships no type hints; we only call load() and serialize_float32().
+module = ["sqlite_vec"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+
+# Embeddings run on CPU. Without this, Linux (CI) would pull multi-GB CUDA wheels for torch.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
