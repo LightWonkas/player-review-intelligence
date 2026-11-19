@@ -33,8 +33,26 @@ from review_intel.collectors import build_sources
 from review_intel.db.apps import SyncResult, sync_apps
 from review_intel.db.session import init_db, make_engine, make_session_factory
 from review_intel.domain import Store
+from review_intel.evals.dataset import (
+    DEFAULT_LABELS_PATH,
+    load_labels,
+    sample_candidates,
+)
+from review_intel.evals.labeling import run_labeling
+from review_intel.evals.runner import (
+    evaluate,
+    format_report,
+    load_reports,
+    predict,
+    previous_report,
+    render_readme_block,
+    run_judge,
+    save_report,
+    update_readme,
+)
 from review_intel.ingest import fetch_and_store
 from review_intel.llm.client import make_client
+from review_intel.llm.pricing import UsageTotals
 from review_intel.llm.taxonomy import load_taxonomy
 from review_intel.settings import get_settings
 
@@ -270,3 +288,111 @@ def _print_category_counts(session: Session, slug: str, classifier: Classifier) 
     typer.echo(f"Primary category ({total} classified reviews, this prompt + model):")
     for category, count in counts:
         typer.echo(f"  {category:<20} {count:>5}  {count / total:6.1%}")
+
+
+LabelsFileOption = Annotated[Path, typer.Option(help="Labeled eval set (JSON Lines).")]
+SPARE_CANDIDATES = 40  # extra reviews offered so skipped ones can be replaced
+
+
+@app.command()
+def label(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    target: Annotated[int, typer.Option(min=1, help="How many labels the set should have.")] = 100,
+    labels_file: LabelsFileOption = DEFAULT_LABELS_PATH,
+    seed: Annotated[int, typer.Option(help="Sampling seed; keep it fixed.")] = 7,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Label reviews by hand for the eval set. Blind: the model's answers are not shown.
+
+    Progress is saved after every review; run the command again to continue."""
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    existing = load_labels(labels_file)
+    if len(existing) >= target:
+        engine.dispose()
+        typer.echo(f"{labels_file} already has {len(existing)} labels (target {target}).")
+        return
+    with make_session_factory(engine)() as session:
+        candidates = sample_candidates(
+            session,
+            app_slug,
+            target + SPARE_CANDIDATES,
+            seed=seed,
+            exclude={item.key for item in existing},
+        )
+    engine.dispose()
+
+    typer.echo(f"{len(existing)}/{target} labeled. Keys: number = category, s = skip, q = quit.")
+    result = run_labeling(
+        candidates,
+        load_taxonomy(settings.taxonomy_path),
+        labels_file,
+        already_labeled=len(existing),
+        target=target,
+        ask=input,
+        say=typer.echo,
+    )
+    total = len(existing) + result.labeled
+    typer.echo("")
+    typer.echo(f"Saved {result.labeled} new labels ({total}/{target}) to {labels_file}.")
+    if total < target and not result.quit:
+        typer.echo("Ran out of candidates; re-run with a different --seed to get more.")
+
+
+@app.command("eval")
+def eval_command(
+    labels_file: LabelsFileOption = DEFAULT_LABELS_PATH,
+    judge: Annotated[
+        int, typer.Option(min=0, help="Summaries to check with the LLM judge (0 = skip).")
+    ] = 20,
+    concurrency: Annotated[int, typer.Option(min=1, max=16)] = 4,
+    write_readme: Annotated[
+        bool, typer.Option("--write-readme", help="Update the eval table in README.md.")
+    ] = False,
+) -> None:
+    """Score the classifier against the hand-labeled set and compare with the last run."""
+    settings = get_settings()
+    labels = load_labels(labels_file)
+    if not labels:
+        typer.echo(f"No labels in {labels_file}. Run `review-intel label` first.", err=True)
+        raise typer.Exit(code=1)
+
+    taxonomy = load_taxonomy(settings.taxonomy_path)
+    try:
+        client = make_client(settings)
+        classifier = Classifier(client, settings.classify_model, taxonomy)
+        predictions, classify_usage = predict(labels, classifier, concurrency=concurrency)
+        judge_scores, judge_usage = None, UsageTotals()
+        if judge:
+            judge_scores, judge_usage = run_judge(
+                client, settings.judge_model, labels, predictions, judge, concurrency=concurrency
+            )
+    except anthropic.AuthenticationError as exc:
+        typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
+        raise typer.Exit(code=1) from exc
+    except (*FATAL_API_ERRORS, anthropic.AnthropicError) as exc:
+        typer.echo(f"Anthropic API error, eval stopped: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    report = evaluate(
+        labels,
+        predictions,
+        taxonomy.names,
+        prompt_version=classifier.prompt_version,
+        model=classifier.model,
+        judge=judge_scores,
+        cost_usd={
+            "classification": classify_usage.cost_usd(classifier.model),
+            "judge": judge_usage.cost_usd(settings.judge_model),
+        },
+    )
+    previous = previous_report(load_reports(), report.prompt_version, report.model)
+    path = save_report(report)
+    typer.echo(format_report(report, previous))
+    typer.echo("")
+    typer.echo(f"Saved {path}")
+    if write_readme:
+        update_readme(Path("README.md"), render_readme_block(load_reports()))
+        typer.echo("Updated the eval table in README.md")

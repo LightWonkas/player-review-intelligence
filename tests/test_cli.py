@@ -8,8 +8,9 @@ from typer.testing import CliRunner
 from review_intel.cli import app
 from review_intel.collectors.base import ReviewSource
 from review_intel.db.models import App
-from review_intel.domain import Store
+from review_intel.domain import Sentiment, Store
 
+from .conftest import REPO_ROOT
 from .fake_anthropic import VALID_INPUT, FakeAnthropic, always, fake_client, tool_message
 from .fakes import FakeSource, make_raw
 
@@ -169,3 +170,60 @@ def test_classify_prints_category_counts_and_cost(
     assert second.exit_code == 0, second.output
     assert "Nothing to classify" in second.output
     assert len(fake.messages.calls) == 3
+
+
+def test_eval_command_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import UTC, datetime
+
+    from review_intel.evals.dataset import LabeledReview, append_label, split_for
+    from review_intel.evals.judge import JudgeVerdict
+
+    from .fake_anthropic import FakeParsedResponse, with_judge
+
+    monkeypatch.chdir(tmp_path)  # predictions/results/README are written relative to cwd
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "taxonomy.yaml").write_text(
+        (REPO_ROOT / "config" / "taxonomy.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    labels_file = tmp_path / "labels.jsonl"
+    for i in range(4):
+        key = f"google_play:{i}"
+        append_label(
+            LabeledReview(
+                key=key,
+                store=Store.GOOGLE_PLAY,
+                rating=1,
+                title=None,
+                body="crash",
+                app_version=None,
+                primary_category="bug_crash",
+                categories=["bug_crash"],
+                sentiment=Sentiment.NEGATIVE,
+                split=split_for(key),
+                labeled_at=datetime(2026, 11, 19, tzinfo=UTC),
+            ),
+            labels_file,
+        )
+    verdict = JudgeVerdict(score=5, unsupported_claims=[], reasoning="ok")
+    fake = with_judge(
+        FakeAnthropic(always(tool_message(VALID_INPUT))), lambda _: FakeParsedResponse(verdict)
+    )
+    monkeypatch.setattr("review_intel.cli.make_client", lambda _settings: fake_client(fake))
+
+    result = runner.invoke(
+        app, ["eval", "--labels-file", str(labels_file), "--judge", "2", "--write-readme"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "all  n=4   primary acc 1.000" in result.output
+    assert "Summary faithfulness (claude-sonnet-5-5, n=2): mean 5.00/5" in result.output
+    assert len(list((tmp_path / "evals" / "results").glob("*.json"))) == 1
+    assert "<!-- eval:start -->" in (tmp_path / "README.md").read_text(encoding="utf-8")
+
+
+def test_eval_without_labels_explains_what_to_do(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["eval", "--labels-file", str(tmp_path / "none.jsonl")])
+
+    assert result.exit_code == 1
+    assert "review-intel label" in result.output
