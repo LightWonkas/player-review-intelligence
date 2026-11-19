@@ -12,6 +12,8 @@ uv run review-intel fetch --app critical-strike --store all --limit 100
 uv run python scripts/record_fixtures.py   # re-record test fixtures (live network, by hand only)
 uv run review-intel classify --app critical-strike --limit 100   # costs money: Claude API
 uv run review-intel classify --app critical-strike --limit 500 --batch   # half price, async
+uv run review-intel label --app critical-strike   # hand-label the eval set (blind)
+uv run review-intel eval --write-readme           # score vs labels (~$0.08; cached per prompt version)
 uv run pytest                    # tests
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                      # strict type check
@@ -26,6 +28,8 @@ uv run mypy                      # strict type check
 - `src/review_intel/llm/`: taxonomy, prompt + strict tool, Pydantic schema, pricing, client
 - `src/review_intel/classify.py`: sync / batch classification, failures, category counts
 - `config/taxonomy.yaml`: categories; editing it changes `prompt_version` automatically
+- `src/review_intel/evals/`: labeled set + dev/test split, metrics, eval runner, Sonnet judge
+- `evals/`: `labeled_reviews.jsonl` (hand labels), `predictions/` (cache), `results/` (one JSON per run)
 - `src/review_intel/apps_config.py`: validated `config/apps.yaml` (games to track)
 - `src/review_intel/settings.py`: env / `.env` settings
 
@@ -43,4 +47,4 @@ uv run mypy                      # strict type check
 
 ## Rule
 
-Run tests and evals before claiming a change works.
+Run tests and evals before claiming a change works. Tune prompts on the `dev` split; report `test`.

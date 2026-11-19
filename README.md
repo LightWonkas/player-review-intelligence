@@ -4,7 +4,7 @@ An AI agent system that collects public app-store reviews for mobile games, clas
 
 Games are configured in [`config/apps.yaml`](config/apps.yaml) (Google Play + App Store); adding one needs no code changes.
 
-> Status: **M3 (classification with Claude)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
+> Status: **M4 (evals)**. See [`docs/SPEC.md`](docs/SPEC.md) for the full plan.
 
 ## Quickstart
 
@@ -46,6 +46,24 @@ no result for the current prompt version and model.
 The shared prefix (tool + system prompt + taxonomy, ~1,900 tokens) is prompt-cached, so after the
 first request each review pays only for its own ~300 input and ~210 output tokens. Estimates use
 the price table in `src/review_intel/llm/pricing.py`; check Anthropic's pricing page for billing.
+
+## Evals
+
+100 reviews are labeled by hand (`review-intel label`), blind: the labeler never sees the model's
+answer, which would bias labels toward it. The sample is 40% random (the real mix, mostly praise)
+and 60% low-rated reviews with real text, where the hard categories are, with at least 25% from
+the App Store. A hash of each review fixes it in a 70/30 dev/test split: prompts are tuned on dev
+and the headline number is test.
+
+`review-intel eval` reports primary-category accuracy, per-category precision/recall/F1,
+macro-F1, sentiment accuracy and a confusion matrix, and compares with the previous prompt or
+model. An LLM judge (`claude-sonnet-5-5`, stronger than the classifier so no model grades its own
+work) scores per-review summaries for faithfulness. Predictions are cached per prompt version, so
+re-running an unchanged prompt is free; a run with the judge costs about $0.08.
+
+<!-- eval:start -->
+_No eval run yet._
+<!-- eval:end -->
 
 ## Development
 
