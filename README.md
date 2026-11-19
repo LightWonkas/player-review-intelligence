@@ -35,24 +35,26 @@ Games are configured in [`config/apps.yaml`](config/apps.yaml); adding one needs
 
 ```mermaid
 flowchart LR
-  subgraph stores[Public stores]
-    GP[Google Play]
-    AS[App Store feed<br/>+ version history]
+  subgraph stores["Public stores"]
+    GP["Google Play"]
+    AS["App Store feed<br/>and version history"]
   end
   GP --> COL
   AS --> COL
-  COL[collectors<br/>pacing · retries] --> DB[(SQLite<br/>reviews · labels · patch notes · reports<br/>+ sqlite-vec vectors)]
-  DB <--> CLS[classify<br/>Haiku 5.5 · strict tool<br/>cache · batches]
-  DB <--> IDX[index<br/>local MiniLM embeddings]
-  EV[evals<br/>blind labels · metrics · judge] -. keeps the prompt honest .-> CLS
-  DB --> INS[insights<br/>SQL answers]
-  DB --> RAG[ask · spikes<br/>RAG + z-test]
-  INS --> REP[weekly report<br/>Sonnet prose · checks · judge]
-  INS --> DASH[dashboard<br/>FastAPI · SVG]
-  INS --> MCP[MCP server<br/>tools · resources · prompts]
+  COL["collectors<br/>pacing, retries"] --> DB[("SQLite<br/>reviews, labels, patch notes, reports<br/>plus sqlite-vec vectors")]
+  DB --> CLS["classify<br/>Haiku 5.5, strict tool<br/>prompt cache, batches"]
+  CLS --> DB
+  DB --> IDX["index<br/>local MiniLM embeddings"]
+  IDX --> DB
+  EV["evals<br/>blind labels, metrics, judge"] -.->|keeps the prompt honest| CLS
+  DB --> INS["insights<br/>SQL answers"]
+  DB --> RAG["ask and spikes<br/>RAG, z-test"]
+  INS --> REP["weekly report<br/>Sonnet prose, checks, judge"]
+  INS --> DASH["dashboard<br/>FastAPI, SVG"]
+  INS --> MCP["MCP server<br/>tools, resources, prompts"]
   RAG --> MCP
-  REP --> SL[Slack]
-  MCP --> CC[Claude Code / Desktop<br/>skills · subagents]
+  REP --> SL["Slack"]
+  MCP --> CC["Claude Code / Desktop<br/>skills, subagents"]
 ```
 
 Each module is described in two sentences in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
