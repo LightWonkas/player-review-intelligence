@@ -1,0 +1,809 @@
+{
+  "created_at": "2026-11-19T17:54:12+00:00",
+  "prompt_version": "v1-10aea4a5",
+  "model": "claude-haiku-5-5",
+  "n_labels": 100,
+  "splits": {
+    "test": {
+      "n": 35,
+      "failed": 0,
+      "primary_accuracy": 0.8857142857142857,
+      "macro_f1": 0.6988455988455988,
+      "sentiment_accuracy": 0.9428571428571428,
+      "per_class": {
+        "bug_crash": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "predicted": 2
+        },
+        "performance_lag": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1,
+          "predicted": 1
+        },
+        "matchmaking": {
+          "precision": 1.0,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "support": 5,
+          "predicted": 4
+        },
+        "balance_weapons": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 1
+        },
+        "monetization_iap": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091,
+          "support": 6,
+          "predicted": 5
+        },
+        "ads": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 3,
+          "predicted": 3
+        },
+        "cheating_hackers": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "controls_ux": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "predicted": 2
+        },
+        "content_request": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1,
+          "predicted": 1
+        },
+        "connectivity_server": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "praise": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 13,
+          "predicted": 13
+        },
+        "other": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571,
+          "support": 4,
+          "predicted": 3
+        }
+      },
+      "confusion": {
+        "bug_crash": {
+          "bug_crash": 1,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "performance_lag": {
+          "bug_crash": 1,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "matchmaking": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 4,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 1,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "balance_weapons": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "monetization_iap": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 1,
+          "monetization_iap": 5,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "ads": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 3,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "cheating_hackers": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "controls_ux": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 1,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "content_request": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 1,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "connectivity_server": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "praise": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 13,
+          "other": 0
+        },
+        "other": {
+          "bug_crash": 0,
+          "performance_lag": 1,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 3
+        }
+      }
+    },
+    "dev": {
+      "n": 65,
+      "failed": 0,
+      "primary_accuracy": 0.8923076923076924,
+      "macro_f1": 0.7598927875243665,
+      "sentiment_accuracy": 0.9846153846153847,
+      "per_class": {
+        "bug_crash": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "performance_lag": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "matchmaking": {
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 3,
+          "predicted": 2
+        },
+        "balance_weapons": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1,
+          "predicted": 1
+        },
+        "monetization_iap": {
+          "precision": 0.9473684210526315,
+          "recall": 0.9473684210526315,
+          "f1": 0.9473684210526315,
+          "support": 19,
+          "predicted": 19
+        },
+        "ads": {
+          "precision": 0.7142857142857143,
+          "recall": 1.0,
+          "f1": 0.8333333333333333,
+          "support": 5,
+          "predicted": 7
+        },
+        "cheating_hackers": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 2,
+          "predicted": 4
+        },
+        "controls_ux": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 2,
+          "predicted": 0
+        },
+        "content_request": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "f1": 0.8,
+          "support": 2,
+          "predicted": 3
+        },
+        "connectivity_server": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "praise": {
+          "precision": 0.9583333333333334,
+          "recall": 0.9583333333333334,
+          "f1": 0.9583333333333334,
+          "support": 24,
+          "predicted": 24
+        },
+        "other": {
+          "precision": 1.0,
+          "recall": 0.7142857142857143,
+          "f1": 0.8333333333333333,
+          "support": 7,
+          "predicted": 5
+        }
+      },
+      "confusion": {
+        "bug_crash": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "performance_lag": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "matchmaking": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 2,
+          "balance_weapons": 0,
+          "monetization_iap": 1,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "balance_weapons": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 1,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "monetization_iap": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 18,
+          "ads": 1,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "ads": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 5,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "cheating_hackers": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 2,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "controls_ux": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 2,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "content_request": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 2,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "connectivity_server": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "praise": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 1,
+          "connectivity_server": 0,
+          "praise": 23,
+          "other": 0
+        },
+        "other": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 1,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 1,
+          "other": 5
+        }
+      }
+    },
+    "all": {
+      "n": 100,
+      "failed": 0,
+      "primary_accuracy": 0.89,
+      "macro_f1": 0.7051843954099594,
+      "sentiment_accuracy": 0.97,
+      "per_class": {
+        "bug_crash": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "predicted": 2
+        },
+        "performance_lag": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1,
+          "predicted": 1
+        },
+        "matchmaking": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571,
+          "support": 8,
+          "predicted": 6
+        },
+        "balance_weapons": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1,
+          "predicted": 2
+        },
+        "monetization_iap": {
+          "precision": 0.9583333333333334,
+          "recall": 0.92,
+          "f1": 0.9387755102040817,
+          "support": 25,
+          "predicted": 24
+        },
+        "ads": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889,
+          "support": 8,
+          "predicted": 10
+        },
+        "cheating_hackers": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 2,
+          "predicted": 4
+        },
+        "controls_ux": {
+          "precision": 0.5,
+          "recall": 0.3333333333333333,
+          "f1": 0.4,
+          "support": 3,
+          "predicted": 2
+        },
+        "content_request": {
+          "precision": 0.75,
+          "recall": 1.0,
+          "f1": 0.8571428571428571,
+          "support": 3,
+          "predicted": 4
+        },
+        "connectivity_server": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0,
+          "predicted": 0
+        },
+        "praise": {
+          "precision": 0.972972972972973,
+          "recall": 0.972972972972973,
+          "f1": 0.972972972972973,
+          "support": 37,
+          "predicted": 37
+        },
+        "other": {
+          "precision": 1.0,
+          "recall": 0.7272727272727273,
+          "f1": 0.8421052631578948,
+          "support": 11,
+          "predicted": 8
+        }
+      },
+      "confusion": {
+        "bug_crash": {
+          "bug_crash": 1,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "performance_lag": {
+          "bug_crash": 1,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "matchmaking": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 6,
+          "balance_weapons": 0,
+          "monetization_iap": 1,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 1,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "balance_weapons": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 1,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "monetization_iap": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 1,
+          "monetization_iap": 23,
+          "ads": 1,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "ads": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 8,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "cheating_hackers": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 2,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "controls_ux": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 2,
+          "controls_ux": 1,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "content_request": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 3,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "connectivity_server": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 0,
+          "other": 0
+        },
+        "praise": {
+          "bug_crash": 0,
+          "performance_lag": 0,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 0,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 1,
+          "connectivity_server": 0,
+          "praise": 36,
+          "other": 0
+        },
+        "other": {
+          "bug_crash": 0,
+          "performance_lag": 1,
+          "matchmaking": 0,
+          "balance_weapons": 0,
+          "monetization_iap": 0,
+          "ads": 1,
+          "cheating_hackers": 0,
+          "controls_ux": 0,
+          "content_request": 0,
+          "connectivity_server": 0,
+          "praise": 1,
+          "other": 8
+        }
+      }
+    }
+  },
+  "judge": {
+    "model": "claude-sonnet-5-5",
+    "n": 20,
+    "errors": 0,
+    "mean_score": 4.65,
+    "share_at_least_4": 1.0,
+    "low_scores": []
+  },
+  "cost_usd": {
+    "classification": 0.0,
+    "judge": 0.054858
+  }
+}

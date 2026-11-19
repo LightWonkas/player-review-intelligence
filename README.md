@@ -49,11 +49,15 @@ the price table in `src/review_intel/llm/pricing.py`; check Anthropic's pricing 
 
 ## Evals
 
-100 reviews are labeled by hand (`review-intel label`), blind: the labeler never sees the model's
-answer, which would bias labels toward it. The sample is 40% random (the real mix, mostly praise)
+The reference set has 100 labeled reviews, labeled blind: the labeler never sees the model's
+answer, which would bias labels toward it. The current labels were set by `claude-opus-5-5`
+(recorded per item in the `labeler` field), a stronger model than the classifier, so the scores
+measure agreement with a stronger reference rather than human accuracy; `review-intel label`
+lets a person relabel or extend the set. The sample is 40% random (the real mix, mostly praise)
 and 60% low-rated reviews with real text, where the hard categories are, with at least 25% from
 the App Store. A hash of each review fixes it in a 70/30 dev/test split: prompts are tuned on dev
-and the headline number is test.
+and the headline number is test. With 35 test reviews, one review moves accuracy by about 3
+points, and categories with 1-3 examples are anecdotes rather than measurements.
 
 `review-intel eval` reports primary-category accuracy, per-category precision/recall/F1,
 macro-F1, sentiment accuracy and a confusion matrix, and compares with the previous prompt or
@@ -62,7 +66,9 @@ work) scores per-review summaries for faithfulness. Predictions are cached per p
 re-running an unchanged prompt is free; a run with the judge costs about $0.08.
 
 <!-- eval:start -->
-_No eval run yet._
+| Date | Prompt | Model | Test acc | Test macro-F1 | Sentiment acc (all) | Judge |
+|---|---|---|---:|---:|---:|---:|
+| 2026-11-19 | `v1-10aea4a5` | claude-haiku-5-5 | 0.89 (n=35) | 0.70 | 0.97 | 4.65/5 |
 <!-- eval:end -->
 
 ## Development
