@@ -182,6 +182,41 @@ class PatchNote(Base):
     text: Mapped[str] = mapped_column(Text)
 
 
+class PatchNoteChunk(Base):
+    """One line of a patch note ("New Weapon Blueprint: False Mercy").
+
+    Notes are embedded line by line so a spike can point at the specific change that
+    matches the complaints, not just the whole release.
+    """
+
+    __tablename__ = "patch_note_chunks"
+    __table_args__ = (
+        UniqueConstraint("patch_note_id", "position", name="uq_patch_note_chunks_note_position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patch_note_id: Mapped[int] = mapped_column(
+        ForeignKey("patch_notes.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int]
+    text: Mapped[str] = mapped_column(Text)
+
+
+class EmbeddedItem(Base):
+    """What is already in the vector index, so `index` only embeds new or changed text.
+
+    `text_hash` covers the text and the embedding model; a change in either re-embeds.
+    """
+
+    __tablename__ = "embedded_items"
+    __table_args__ = (UniqueConstraint("kind", "item_id", name="uq_embedded_items_kind_item"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))  # "review" or "patch_chunk"
+    item_id: Mapped[int]
+    text_hash: Mapped[str] = mapped_column(String(64))
+
+
 class Report(Base):
     """A generated weekly report.
 

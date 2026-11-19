@@ -7,6 +7,7 @@ config change, not a code change.
 from pathlib import Path
 from typing import Any
 
+import sqlite_vec
 from sqlalchemy import Engine, create_engine, event, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,13 +25,18 @@ def make_engine(database_url: str) -> Engine:
 
     engine = create_engine(url)
 
-    # SQLite ignores foreign keys unless asked per connection; without this,
-    # ON DELETE CASCADE silently does nothing.
     @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
+    def _configure_connection(dbapi_connection: Any, _record: Any) -> None:
+        # SQLite ignores foreign keys unless asked per connection; without this,
+        # ON DELETE CASCADE silently does nothing.
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+        # sqlite-vec adds the vec0 virtual tables used for RAG. Loading is switched
+        # back off right away so SQL can't load other extensions later.
+        dbapi_connection.enable_load_extension(True)
+        sqlite_vec.load(dbapi_connection)
+        dbapi_connection.enable_load_extension(False)
 
     return engine
 
