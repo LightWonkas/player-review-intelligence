@@ -1,6 +1,12 @@
 import pytest
 
-from review_intel.evals.metrics import accuracy, confusion_matrix, macro_f1, per_class
+from review_intel.evals.metrics import (
+    accuracy,
+    bootstrap_ci,
+    confusion_matrix,
+    macro_f1,
+    per_class,
+)
 
 LABELS = ["bug", "ads", "praise"]
 TRUE = ["bug", "bug", "ads", "praise", "praise", "praise"]
@@ -53,3 +59,18 @@ def test_confusion_matrix_keeps_unknown_predictions_visible() -> None:
 
     assert matrix["bug"] == {"bug": 1, "ads": 0, "<failed>": 0}
     assert matrix["ads"] == {"bug": 0, "ads": 0, "<failed>": 1}
+
+
+def test_bootstrap_interval_brackets_the_estimate_and_narrows_with_more_data() -> None:
+    small = bootstrap_ci(TRUE, PRED, accuracy)
+    big = bootstrap_ci(TRUE * 20, PRED * 20, accuracy)
+
+    assert small[0] <= 4 / 6 <= small[1]
+    assert big[0] <= 4 / 6 <= big[1]
+    assert (big[1] - big[0]) < (small[1] - small[0])
+    assert bootstrap_ci(TRUE, PRED, accuracy) == small  # seeded: reproducible
+    assert bootstrap_ci([], [], accuracy) == (0.0, 0.0)
+
+
+def test_bootstrap_interval_for_a_perfect_score_is_a_point() -> None:
+    assert bootstrap_ci(TRUE, TRUE, accuracy) == (1.0, 1.0)

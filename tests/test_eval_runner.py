@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,9 +14,11 @@ from review_intel.evals.judge import JudgeVerdict, build_judge_message, judge_su
 from review_intel.evals.runner import (
     README_END,
     README_START,
+    Prediction,
     evaluate,
     format_report,
     judge_source,
+    latest_judge,
     load_reports,
     predict,
     previous_report,
@@ -223,3 +226,58 @@ def test_judge_source_includes_the_rating_the_classifier_saw() -> None:
 
     assert judge_source(_label(1, "ads")) == "Rating: 2/5 stars\nads review 1"
     assert judge_source(with_title) == "Rating: 2/5 stars\nTitle: Too many ads\nads review 1"
+
+
+def test_scores_carry_bootstrap_intervals_into_report_and_readme() -> None:
+    labels = [_label(i, "ads") for i in range(10)] + [_label(i, "bug_crash") for i in range(10, 20)]
+    predictions = {
+        lb.key: Prediction(lb.key, "ads", ["ads"], "negative", "s", None) for lb in labels
+    }
+
+    report = evaluate(
+        labels, predictions, TAXONOMY.names, prompt_version="v1-x", model="claude-haiku-5-5"
+    )
+    everything = report.splits["all"]
+
+    assert everything.primary_accuracy_ci is not None
+    low, high = everything.primary_accuracy_ci
+    assert low <= 0.5 <= high
+    assert "[" in format_report(report, None)
+    block = render_readme_block([json.loads(json.dumps(report.to_dict()))])
+    assert "Test acc [95% CI]" in block and "-" in block
+
+
+def test_old_results_without_intervals_still_render() -> None:
+    old = {
+        "created_at": "2026-11-19T00:00:00+00:00",
+        "prompt_version": "v1-old",
+        "model": "claude-haiku-5-5",
+        "splits": {
+            "test": {"primary_accuracy": 0.9, "n": 30, "macro_f1": 0.7},
+            "all": {"sentiment_accuracy": 0.95},
+        },
+        "judge": None,
+    }
+
+    assert "| 0.90 (n=30) | 0.70 |" in render_readme_block([old])
+
+
+def test_latest_judge_is_reused_only_for_the_same_prompt_and_model() -> None:
+    judge = {
+        "model": "claude-sonnet-5-5",
+        "n": 20,
+        "errors": 0,
+        "mean_score": 4.65,
+        "share_at_least_4": 1.0,
+        "low_scores": [],
+    }
+    reports: list[dict[str, Any]] = [
+        {"prompt_version": "v1-a", "model": "m", "judge": judge},
+        {"prompt_version": "v1-a", "model": "m", "judge": None},
+        {"prompt_version": "v1-b", "model": "m", "judge": judge},
+    ]
+
+    reused = latest_judge(reports, "v1-a", "m")
+
+    assert reused is not None and reused.mean_score == 4.65
+    assert latest_judge(reports, "v1-c", "m") is None

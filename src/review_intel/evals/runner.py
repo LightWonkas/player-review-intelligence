@@ -20,7 +20,13 @@ import anthropic
 from review_intel.classify import Classifier, ClassifyOutcome
 from review_intel.evals.dataset import LabeledReview
 from review_intel.evals.judge import judge_summary
-from review_intel.evals.metrics import accuracy, confusion_matrix, macro_f1, per_class
+from review_intel.evals.metrics import (
+    accuracy,
+    bootstrap_ci,
+    confusion_matrix,
+    macro_f1,
+    per_class,
+)
 from review_intel.llm.pricing import UsageTotals
 
 PREDICTIONS_DIR = Path("evals/predictions")
@@ -110,6 +116,9 @@ class SplitScores:
     sentiment_accuracy: float
     per_class: dict[str, dict[str, Any]]
     confusion: dict[str, dict[str, int]]
+    # 95% bootstrap intervals; None in results saved before they were added.
+    primary_accuracy_ci: tuple[float, float] | None = None
+    macro_f1_ci: tuple[float, float] | None = None
 
 
 def score(
@@ -126,6 +135,10 @@ def score(
         for label in labels
     ]
     classes = per_class(true_primary, pred_primary, names)
+
+    def macro(t: Sequence[str], p: Sequence[str]) -> float:
+        return macro_f1(per_class(t, p, names))
+
     return SplitScores(
         n=len(labels),
         failed=pred_primary.count(FAILED),
@@ -134,6 +147,8 @@ def score(
         sentiment_accuracy=accuracy(true_sentiment, pred_sentiment),
         per_class={name: m.to_dict() for name, m in classes.items()},
         confusion=confusion_matrix(true_primary, pred_primary, names),
+        primary_accuracy_ci=bootstrap_ci(true_primary, pred_primary, accuracy),
+        macro_f1_ci=bootstrap_ci(true_primary, pred_primary, macro),
     )
 
 
@@ -267,6 +282,29 @@ def previous_report(
     return others[-1] if others else None
 
 
+def latest_judge(
+    reports: list[dict[str, Any]], prompt_version: str, model: str
+) -> JudgeScores | None:
+    """The judge result of the latest run with the same prompt and model.
+
+    Predictions are cached per (prompt, model) and the judge's sample is seeded, so the
+    same summaries would be judged again; reusing the result avoids paying for it twice.
+    """
+    same = [
+        r
+        for r in reports
+        if (r["prompt_version"], r["model"]) == (prompt_version, model) and r.get("judge")
+    ]
+    return JudgeScores(**same[-1]["judge"]) if same else None
+
+
+def _ci(interval: Any) -> str:
+    if not interval:
+        return ""
+    low, high = interval
+    return f" [{low:.2f}-{high:.2f}]"
+
+
 def _delta(current: float, previous: float | None) -> str:
     if previous is None:
         return ""
@@ -283,14 +321,17 @@ def format_report(report: EvalReport, previous: dict[str, Any] | None) -> str:
         prev = previous["splits"][name] if previous else None
         lines.append(
             f"  {name:<4} n={s.n:<3} primary acc {s.primary_accuracy:.3f}"
+            f"{_ci(s.primary_accuracy_ci)}"
             f"{_delta(s.primary_accuracy, prev and prev['primary_accuracy'])} | "
-            f"macro-F1 {s.macro_f1:.3f}{_delta(s.macro_f1, prev and prev['macro_f1'])} | "
+            f"macro-F1 {s.macro_f1:.3f}{_ci(s.macro_f1_ci)}"
+            f"{_delta(s.macro_f1, prev and prev['macro_f1'])} | "
             f"sentiment {s.sentiment_accuracy:.3f}"
             f"{_delta(s.sentiment_accuracy, prev and prev['sentiment_accuracy'])}"
             + (f" | {s.failed} failed" if s.failed else "")
         )
 
     overall = report.splits["all"]
+    lines.append("  [low-high] = 95% bootstrap interval")
     lines.append("\nPer category (all labels):  precision  recall  f1    support")
     for name, m in overall.per_class.items():
         if m["support"] or m["predicted"]:
@@ -328,7 +369,8 @@ def format_report(report: EvalReport, previous: dict[str, Any] | None) -> str:
 
 def render_readme_block(reports: list[dict[str, Any]]) -> str:
     rows = [
-        "| Date | Prompt | Model | Test acc | Test macro-F1 | Sentiment acc (all) | Judge |",
+        "| Date | Prompt | Model | Test acc [95% CI] | Test macro-F1 [95% CI] "
+        "| Sentiment acc (all) | Judge |",
         "|---|---|---|---:|---:|---:|---:|",
     ]
     for r in reports:
@@ -336,7 +378,8 @@ def render_readme_block(reports: list[dict[str, Any]]) -> str:
         judge = f"{r['judge']['mean_score']:.2f}/5" if r.get("judge") else "-"
         rows.append(
             f"| {r['created_at'][:10]} | `{r['prompt_version']}` | {r['model']} "
-            f"| {test['primary_accuracy']:.2f} (n={test['n']}) | {test['macro_f1']:.2f} "
+            f"| {test['primary_accuracy']:.2f}{_ci(test.get('primary_accuracy_ci'))} "
+            f"(n={test['n']}) | {test['macro_f1']:.2f}{_ci(test.get('macro_f1_ci'))} "
             f"| {everything['sentiment_accuracy']:.2f} | {judge} |"
         )
     return "\n".join([README_START, *rows, README_END])

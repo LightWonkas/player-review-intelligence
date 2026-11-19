@@ -5,8 +5,9 @@ true and no predicted examples gets 0 for precision/recall/F1 and is left out of
 macro-F1, so absent categories don't drag the average down.
 """
 
+import random
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -66,3 +67,32 @@ def confusion_matrix(
         if t in matrix:
             matrix[t][p] += 1
     return matrix
+
+
+def bootstrap_ci(
+    y_true: Sequence[str],
+    y_pred: Sequence[str],
+    statistic: Callable[[Sequence[str], Sequence[str]], float],
+    *,
+    resamples: int = 2000,
+    level: float = 0.95,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """Percentile bootstrap interval for a metric over paired labels.
+
+    With 35 test reviews one review moves accuracy by ~3 points; the interval makes that
+    uncertainty part of the result instead of a footnote. The seed keeps it reproducible.
+    """
+    pairs = list(zip(y_true, y_pred, strict=True))
+    if not pairs:
+        return (0.0, 0.0)
+    rng = random.Random(seed)
+    stats = []
+    for _ in range(resamples):
+        sample = [pairs[rng.randrange(len(pairs))] for _ in pairs]
+        stats.append(statistic([t for t, _ in sample], [p for _, p in sample]))
+    stats.sort()
+    tail = (1 - level) / 2
+    low = stats[int(tail * (resamples - 1))]
+    high = stats[round((1 - tail) * (resamples - 1))]
+    return (round(low, 4), round(high, 4))

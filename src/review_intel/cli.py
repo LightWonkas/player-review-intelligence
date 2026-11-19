@@ -46,6 +46,7 @@ from review_intel.evals.labeling import run_labeling
 from review_intel.evals.runner import (
     evaluate,
     format_report,
+    latest_judge,
     load_reports,
     predict,
     previous_report,
@@ -410,6 +411,13 @@ def eval_command(
             judge_scores, judge_usage = run_judge(
                 client, settings.judge_model, labels, predictions, judge, concurrency=concurrency
             )
+        else:
+            judge_scores = latest_judge(load_reports(), classifier.prompt_version, classifier.model)
+            if judge_scores is not None:
+                typer.echo(
+                    "Judge: reusing the last result for this prompt and model "
+                    "(same cached summaries); pass --judge N to run it again."
+                )
     except anthropic.AuthenticationError as exc:
         typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
         raise typer.Exit(code=1) from exc
