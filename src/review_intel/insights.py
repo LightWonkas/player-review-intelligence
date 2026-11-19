@@ -495,3 +495,112 @@ def review_detail(
         if label
         else None,
     )
+
+
+# --- period summary and category breakdown (report headline, dashboard) ----------------
+
+
+class PeriodStats(BaseModel):
+    reviews: int  # all reviews, classified or not
+    classified: int
+    by_store: dict[str, int]
+    avg_rating: float | None  # over all reviews
+    sentiment_share: dict[str, float]  # over classified reviews
+    bug_reports: int
+
+
+class PeriodSummary(BaseModel):
+    app: str
+    period_start: datetime
+    period_end: datetime
+    current: PeriodStats
+    previous: PeriodStats  # same-length period just before
+
+
+def _period_stats(
+    session: Session,
+    slug: str,
+    classified: Sequence[ClassifiedReview],
+    start: datetime,
+    end: datetime,
+) -> PeriodStats:
+    rows = session.execute(
+        select(Review.rating, App.store)
+        .join(App, Review.app_id == App.id)
+        .where(App.slug == slug, Review.review_date >= start, Review.review_date < end)
+    ).all()
+    labelled = _in_window(classified, start, end)
+    sentiments = Counter(r.sentiment.value for r in labelled)
+    return PeriodStats(
+        reviews=len(rows),
+        classified=len(labelled),
+        by_store=dict(Counter(store.value for _, store in rows)),
+        avg_rating=round(sum(rating for rating, _ in rows) / len(rows), 2) if rows else None,
+        sentiment_share={
+            s.value: round(sentiments[s.value] / len(labelled), 4) if labelled else 0.0
+            for s in Sentiment
+        },
+        bug_reports=sum(r.is_bug_report for r in labelled),
+    )
+
+
+def period_summary(
+    session: Session,
+    slug: str,
+    *,
+    model: str,
+    prompt_version: str,
+    days: int = 7,
+    now: datetime | None = None,
+) -> PeriodSummary:
+    end = now or datetime.now(UTC)
+    start = end - timedelta(days=days)
+    classified = classified_reviews(session, slug, model=model, prompt_version=prompt_version)
+    return PeriodSummary(
+        app=slug,
+        period_start=start,
+        period_end=end,
+        current=_period_stats(session, slug, classified, start, end),
+        previous=_period_stats(session, slug, classified, start - timedelta(days=days), start),
+    )
+
+
+class CategoryCount(BaseModel):
+    category: str
+    reviews: int
+    share: float
+
+
+class CategoryBreakdown(BaseModel):
+    app: str
+    period_start: datetime
+    period_end: datetime
+    classified: int
+    categories: list[CategoryCount]  # by primary category, largest first
+
+
+def category_breakdown(
+    session: Session,
+    slug: str,
+    *,
+    model: str,
+    prompt_version: str,
+    days: int = 30,
+    now: datetime | None = None,
+) -> CategoryBreakdown:
+    end = now or datetime.now(UTC)
+    start = end - timedelta(days=days)
+    reviews = _in_window(
+        classified_reviews(session, slug, model=model, prompt_version=prompt_version), start, end
+    )
+    counts = Counter(r.primary_category for r in reviews)
+    return CategoryBreakdown(
+        app=slug,
+        period_start=start,
+        period_end=end,
+        classified=len(reviews),
+        categories=[
+            CategoryCount(category=c, reviews=n, share=round(n / len(reviews), 4))
+            for c, n in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+    )

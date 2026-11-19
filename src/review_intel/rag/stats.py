@@ -27,6 +27,7 @@ class ClassifiedReview:
     severity: int
     sentiment: Sentiment
     summary: str
+    is_bug_report: bool
 
 
 @dataclass
@@ -81,6 +82,7 @@ def classified_reviews(
             severity=result.severity,
             sentiment=result.sentiment,
             summary=result.short_summary,
+            is_bug_report=result.is_bug_report,
         )
         for review, app_store, result in session.execute(query)
     ]
