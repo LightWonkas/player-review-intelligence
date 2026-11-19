@@ -10,6 +10,7 @@ from review_intel.collectors.base import ReviewSource
 from review_intel.db.models import App
 from review_intel.domain import Store
 
+from .fake_anthropic import VALID_INPUT, FakeAnthropic, always, fake_client, tool_message
 from .fakes import FakeSource, make_raw
 
 runner = CliRunner()
@@ -138,3 +139,33 @@ def test_fetch_unknown_app_is_a_clear_error(db_url: str, apps_config_path: Path)
 
     assert result.exit_code == 2
     assert "unknown app 'nope'" in result.output
+
+
+def test_classify_prints_category_counts_and_cost(
+    db_url: str, apps_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("review_intel.cli.build_sources", _fake_sources)
+    runner.invoke(app, _fetch_args(db_url, apps_config_path))
+    fake = FakeAnthropic(always(tool_message(VALID_INPUT)))
+    monkeypatch.setattr("review_intel.cli.make_client", lambda _settings: fake_client(fake))
+    args = [
+        "classify",
+        "--app",
+        "critical-strike",
+        "--database-url",
+        db_url,
+        "--apps-config",
+        str(apps_config_path),
+    ]
+
+    first = runner.invoke(app, args)
+    second = runner.invoke(app, args)
+
+    assert first.exit_code == 0, first.output
+    assert "Classified 3, failed 0" in first.output
+    assert "est. cost $" in first.output
+    assert "bug_crash" in first.output
+    assert "100.0%" in first.output
+    assert second.exit_code == 0, second.output
+    assert "Nothing to classify" in second.output
+    assert len(fake.messages.calls) == 3

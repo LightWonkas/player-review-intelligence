@@ -5,20 +5,36 @@ results. Logic lives in modules that tests (and later the MCP server) call direc
 """
 
 import logging
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
+import anthropic
 import typer
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from review_intel import __version__
-from review_intel.apps_config import AppsConfig, load_apps_config
+from review_intel.apps_config import AppsConfig, GameConfig, load_apps_config
+from review_intel.classify import (
+    FATAL_API_ERRORS,
+    Classifier,
+    RunSummary,
+    category_counts,
+    classify_sync,
+    collect_batch,
+    select_unclassified,
+    submit_batch,
+    wait_for_batch,
+)
 from review_intel.collectors import build_sources
 from review_intel.db.apps import SyncResult, sync_apps
 from review_intel.db.session import init_db, make_engine, make_session_factory
 from review_intel.domain import Store
 from review_intel.ingest import fetch_and_store
+from review_intel.llm.client import make_client
+from review_intel.llm.taxonomy import load_taxonomy
 from review_intel.settings import get_settings
 
 app = typer.Typer(
@@ -76,6 +92,14 @@ def _prepare_db(
     return engine, config, sync
 
 
+def _get_game(engine: Engine, config: AppsConfig, slug: str) -> GameConfig:
+    try:
+        return config.get_game(slug)
+    except KeyError as exc:
+        engine.dispose()
+        raise typer.BadParameter(str(exc.args[0]), param_hint="--app") from exc
+
+
 @db_app.command("init")
 def db_init(database_url: DatabaseUrlOption = None, apps_config: AppsConfigOption = None) -> None:
     """Create database tables and register the games from apps.yaml. Safe to re-run."""
@@ -100,11 +124,7 @@ def fetch(
 ) -> None:
     """Fetch the newest public reviews and save them. Re-running adds no duplicates."""
     engine, config, _ = _prepare_db(database_url, apps_config)
-    try:
-        game = config.get_game(app_slug)
-    except KeyError as exc:
-        engine.dispose()
-        raise typer.BadParameter(str(exc.args[0]), param_hint="--app") from exc
+    game = _get_game(engine, config, app_slug)
 
     stores = list(Store) if store is StoreChoice.ALL else [Store(store.value)]
     configured = {listing.store for listing in game.listings}
@@ -129,3 +149,119 @@ def fetch(
 
     if any(result.error for result in results):
         raise typer.Exit(code=1)
+
+
+@app.command()
+def classify(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    limit: Annotated[int, typer.Option(min=1, help="Max reviews to classify, newest first.")] = 100,
+    concurrency: Annotated[
+        int, typer.Option(min=1, max=16, help="Parallel requests (synchronous mode).")
+    ] = 4,
+    batch: Annotated[
+        bool, typer.Option("--batch", help="Use the Message Batches API (half price, slower).")
+    ] = False,
+    resume: Annotated[
+        str | None, typer.Option(help="Collect an earlier batch by id instead of submitting.")
+    ] = None,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Classify reviews that have no result yet for the current prompt version and model."""
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    _get_game(engine, config, app_slug)
+    factory = make_session_factory(engine)
+    try:
+        classifier = Classifier(
+            make_client(settings), settings.classify_model, load_taxonomy(settings.taxonomy_path)
+        )
+        typer.echo(f"Model {classifier.model} | prompt {classifier.prompt_version}")
+        summary = _run_classification(
+            classifier, factory, app_slug, limit, concurrency, batch, resume
+        )
+    except anthropic.AuthenticationError as exc:
+        engine.dispose()
+        typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
+        raise typer.Exit(code=1) from exc
+    except (*FATAL_API_ERRORS, anthropic.AnthropicError) as exc:
+        engine.dispose()
+        typer.echo(f"Anthropic API error, run stopped: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if summary is not None:
+        _print_summary(summary, classifier.model)
+    with factory() as session:
+        _print_category_counts(session, app_slug, classifier)
+    engine.dispose()
+    if summary is not None and summary.failed:
+        raise typer.Exit(code=1)
+
+
+def _run_classification(
+    classifier: Classifier,
+    factory: Callable[[], Session],
+    slug: str,
+    limit: int,
+    concurrency: int,
+    batch: bool,
+    resume: str | None,
+) -> RunSummary | None:
+    if resume is None:
+        with factory() as session:
+            reviews = select_unclassified(
+                session, slug, classifier.prompt_version, classifier.model, limit
+            )
+        if not reviews:
+            typer.echo("Nothing to classify: every review has a result for this prompt and model.")
+            return None
+        typer.echo(f"Classifying {len(reviews)} reviews ({'batch' if batch else 'sync'})...")
+        if not batch:
+            return classify_sync(
+                factory, classifier, reviews, concurrency=concurrency, on_progress=_progress
+            )
+        resume = submit_batch(classifier, reviews)
+        typer.echo(f"Submitted batch {resume}. If this stops, collect it later with:")
+        typer.echo(f"  review-intel classify --app {slug} --resume {resume}")
+
+    wait_for_batch(
+        classifier.client,
+        resume,
+        on_status=lambda b: typer.echo(
+            f"  batch {b.processing_status}: {b.request_counts.succeeded} succeeded, "
+            f"{b.request_counts.processing} processing"
+        ),
+    )
+    return collect_batch(factory, classifier, resume)
+
+
+def _progress(done: int, total: int) -> None:
+    if done % 50 == 0 or done == total:
+        typer.echo(f"  {done}/{total}")
+
+
+def _print_summary(summary: RunSummary, model: str) -> None:
+    typer.echo("")
+    typer.echo(
+        f"Classified {summary.classified}, failed {summary.failed} in {summary.seconds:.0f}s"
+    )
+    if summary.usage.requests:
+        typer.echo(f"  sync:  {summary.usage.describe(model)}")
+    if summary.batch_usage.requests:
+        typer.echo(f"  batch: {summary.batch_usage.describe(model, batch=True)}")
+    cost = summary.cost_usd(model)
+    if cost is not None:
+        typer.echo(f"  total estimated cost: ${cost:.4f}")
+    if summary.failed:
+        typer.echo("  Failed reviews are in the classification_failures table; re-run to retry.")
+
+
+def _print_category_counts(session: Session, slug: str, classifier: Classifier) -> None:
+    counts = category_counts(session, slug, classifier.prompt_version, classifier.model)
+    total = sum(count for _, count in counts)
+    if not total:
+        return
+    typer.echo("")
+    typer.echo(f"Primary category ({total} classified reviews, this prompt + model):")
+    for category, count in counts:
+        typer.echo(f"  {category:<20} {count:>5}  {count / total:6.1%}")
