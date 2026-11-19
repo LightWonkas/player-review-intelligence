@@ -6,7 +6,17 @@ import pytest
 from typer.testing import CliRunner
 
 from review_intel.cli import app
+from review_intel.evals.judge import JudgeVerdict
+from review_intel.report import ReportProse
 
+from .fake_anthropic import (
+    FakeAnthropic,
+    FakeParsedResponse,
+    always,
+    fake_client,
+    text_message,
+)
+from .fake_anthropic import with_judge as with_parse
 from .fake_embedder import FakeEmbedder
 from .test_ask import _client
 from .test_cli import _fake_sources, _fetch_args
@@ -80,3 +90,31 @@ def test_patches_import_rejects_a_file_without_sections(
     )
 
     assert result.exit_code == 1
+
+
+def test_report_command_writes_markdown_and_stores_it(
+    tmp_path: Path, db_url: str, apps_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prose = ReportProse(summary="Quiet week.", issue_notes=[], action_items=[], caveats=[])
+
+    def respond(params: dict[str, object]) -> FakeParsedResponse:
+        if params["output_format"] is JudgeVerdict:
+            return FakeParsedResponse(JudgeVerdict(score=5, unsupported_claims=[], reasoning=""))
+        return FakeParsedResponse(prose)
+
+    client = fake_client(with_parse(FakeAnthropic(always(text_message("unused"))), respond))
+    monkeypatch.setattr("review_intel.cli.make_client", lambda _settings: client)
+    monkeypatch.setattr("review_intel.cli.make_embedder", lambda _name: FakeEmbedder())
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    out = tmp_path / "report.md"
+    common = _common(db_url, apps_config_path)
+
+    result = runner.invoke(app, ["report", *common, "--end", "2026-11-19", "--out", str(out)])
+    no_webhook = runner.invoke(app, ["report", *common, "--post-slack"])
+
+    assert result.exit_code == 0, result.output
+    assert "Judge: 5/5" in result.output
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith("# Player review report:") and "Quiet week." in text
+    assert "**2026-11-12 to 2026-11-18**" in text
+    assert no_webhook.exit_code != 0

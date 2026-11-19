@@ -7,6 +7,7 @@ results. Logic lives in modules that tests (and later the MCP server) call direc
 import logging
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -31,6 +32,7 @@ from review_intel.classify import (
     wait_for_batch,
 )
 from review_intel.collectors import build_sources
+from review_intel.dashboard.app import DashboardDeps, create_app
 from review_intel.db.apps import SyncResult, sync_apps
 from review_intel.db.models import App
 from review_intel.db.session import init_db, make_engine, make_session_factory
@@ -68,7 +70,9 @@ from review_intel.rag.ask import answer_question, build_context, render_context
 from review_intel.rag.embedder import Embedder, SentenceTransformerEmbedder
 from review_intel.rag.index import IndexMissingError, index_game
 from review_intel.rag.spikes import Spike, SpikeSettings, detect_spikes, near_misses
+from review_intel.report import ReportError, default_report_path, generate_report, store_report
 from review_intel.settings import get_settings
+from review_intel.slack import post_to_slack, slack_text
 
 app = typer.Typer(
     help="Player Review Intelligence: collect, classify and report on app-store reviews.",
@@ -655,3 +659,99 @@ def _describe_spike(spike: Spike) -> str:
         f"({spike.after_count}/{spike.after_n} vs {spike.before_count}/{spike.before_n} "
         f"in v{', v'.join(spike.baseline_versions)}; z={spike.z:.1f})"
     )
+
+
+# --- M7: weekly report and dashboard ------------------------------------------------
+
+
+@app.command()
+def report(
+    app_slug: Annotated[str, typer.Option("--app", help="Game slug from apps.yaml.")],
+    days: Annotated[int, typer.Option(min=1, max=90, help="Length of the period.")] = 7,
+    end: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Period ends at the start of this day (UTC)."),
+    ] = None,
+    out: Annotated[Path | None, typer.Option(help="Markdown file to write.")] = None,
+    judge: Annotated[bool, typer.Option(help="Score the prose with the LLM judge.")] = True,
+    post_slack: Annotated[
+        bool, typer.Option("--post-slack", help="Also post a summary to SLACK_WEBHOOK_URL.")
+    ] = False,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Write the weekly report: numbers from the database, prose by Claude (~$0.04)."""
+    settings = get_settings()
+    if post_slack and settings.slack_webhook_url is None:
+        raise typer.BadParameter("set SLACK_WEBHOOK_URL in .env first", param_hint="--post-slack")
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    game = _get_game(engine, config, app_slug)
+    now = end.replace(tzinfo=UTC) if end else None
+    try:
+        with make_session_factory(engine)() as session:
+            run = generate_report(
+                session,
+                make_client(settings),
+                slug=app_slug,
+                game_name=game.name,
+                classify_model=settings.classify_model,
+                prompt_version=_current_prompt_version(),
+                report_model=settings.report_model,
+                judge_model=settings.judge_model if judge else None,
+                days=days,
+                now=now,
+                embedder=make_embedder(settings.embedding_model),
+            )
+            row = store_report(session, run)
+            session.commit()
+    except anthropic.AuthenticationError as exc:
+        engine.dispose()
+        typer.echo("Anthropic rejected the API key. Set ANTHROPIC_API_KEY in .env.", err=True)
+        raise typer.Exit(code=1) from exc
+    except ReportError as exc:
+        engine.dispose()
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    engine.dispose()
+
+    path = out or Path(default_report_path(app_slug, run.facts.period_end.date()))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(run.markdown, encoding="utf-8")
+    typer.echo(f"Wrote {path} (report #{row.id}, {run.facts.summary.current.reviews} reviews)")
+    if run.judge is not None and run.judge.verdict is not None:
+        typer.echo(f"Judge: {run.judge.verdict.score}/5")
+    for warning in run.warnings:
+        typer.echo(f"Warning: {warning}", err=True)
+    for model_name, usage in run.usage.items():
+        typer.echo(f"{model_name}: {usage.describe(model_name)}")
+    if post_slack and settings.slack_webhook_url is not None:
+        try:
+            post_to_slack(settings.slack_webhook_url.get_secret_value(), slack_text(run))
+        except httpx.HTTPError as exc:
+            typer.echo(f"Slack post failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        typer.echo("Posted the summary to Slack.")
+
+
+@app.command()
+def dashboard(
+    host: Annotated[str, typer.Option(help="Keep 127.0.0.1 unless you mean to share it.")] = (
+        "127.0.0.1"
+    ),
+    port: Annotated[int, typer.Option(min=1, max=65535)] = 8765,
+    database_url: DatabaseUrlOption = None,
+    apps_config: AppsConfigOption = None,
+) -> None:
+    """Serve the read-only dashboard (FastAPI) on http://127.0.0.1:8765."""
+    import uvicorn
+
+    settings = get_settings()
+    engine, config, _ = _prepare_db(database_url, apps_config)
+    deps = DashboardDeps(
+        session_factory=make_session_factory(engine),
+        apps=config,
+        classify_model=settings.classify_model,
+        prompt_version=_current_prompt_version(),
+    )
+    typer.echo(f"Dashboard on http://{host}:{port}")
+    uvicorn.run(create_app(deps), host=host, port=port, log_level="warning")
