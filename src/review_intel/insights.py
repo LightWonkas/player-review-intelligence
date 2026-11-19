@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from review_intel.db.models import App, Classification, Review
@@ -64,13 +64,12 @@ def _in_window(
 
 
 def _count_reviews(session: Session, slug: str, start: datetime, end: datetime) -> int:
-    return len(
-        session.scalars(
-            select(Review.id)
-            .join(App, Review.app_id == App.id)
-            .where(App.slug == slug, Review.review_date >= start, Review.review_date < end)
-        ).all()
+    count = session.scalar(
+        select(func.count(Review.id))
+        .join(App, Review.app_id == App.id)
+        .where(App.slug == slug, Review.review_date >= start, Review.review_date < end)
     )
+    return count or 0
 
 
 def _latest_review(session: Session, slug: str) -> datetime | None:
@@ -371,23 +370,34 @@ def search_reviews(
     """Semantic search, optionally limited to a category (any of a review's categories)
     and/or an app version."""
     only: set[int] | None = None
-    if category is not None or version is not None:
-        candidates = select(Review.id).join(App, Review.app_id == App.id).where(App.slug == slug)
+    if category is not None:
+        # Scoped to this game (and version) in SQL. Membership in the JSON list is checked
+        # in Python, which stays portable across SQLite and Postgres.
+        labelled = (
+            select(Classification.review_id, Classification.categories)
+            .join(Review, Classification.review_id == Review.id)
+            .join(App, Review.app_id == App.id)
+            .where(
+                App.slug == slug,
+                Classification.model == model,
+                Classification.prompt_version == prompt_version,
+            )
+        )
         if version is not None:
-            candidates = candidates.where(Review.app_version == version)
-        ids = set(session.scalars(candidates))
-        if category is not None:
-            ids &= {
-                review_id
-                for review_id, categories in session.execute(
-                    select(Classification.review_id, Classification.categories).where(
-                        Classification.model == model,
-                        Classification.prompt_version == prompt_version,
-                    )
-                )
-                if category in categories
-            }
-        only = ids
+            labelled = labelled.where(Review.app_version == version)
+        only = {
+            review_id
+            for review_id, categories in session.execute(labelled)
+            if category in categories
+        }
+    elif version is not None:
+        only = set(
+            session.scalars(
+                select(Review.id)
+                .join(App, Review.app_id == App.id)
+                .where(App.slug == slug, Review.app_version == version)
+            )
+        )
     hits = search(session, REVIEW, slug, embedder.embed([query])[0], limit, only=only)
     ids_in_order = [item_id for item_id, _ in hits]
     rows = {

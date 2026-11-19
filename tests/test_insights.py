@@ -1,8 +1,9 @@
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from review_intel.db.models import Review
@@ -144,3 +145,21 @@ def test_search_skips_reviews_deleted_since_indexing(seed: Seeder) -> None:
 
     assert gone.review_id not in [hit.review_id for hit in result.results]
     assert result.results  # the other reviews still come back
+
+
+def test_category_filter_is_scoped_to_the_game_in_sql(seed: Seeder) -> None:
+    index_game(seed.session, SLUG, FakeEmbedder())
+    statements: list[str] = []
+
+    def record(_conn: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+        statements.append(statement)
+
+    engine = seed.session.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        search_reviews(seed.session, SLUG, "ads", FakeEmbedder(), category="ads", **SCOPE)
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    label_query = next(q for q in statements if "classifications.categories" in q)
+    assert "apps.slug" in label_query  # not every game's labels
