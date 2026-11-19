@@ -33,7 +33,7 @@
     {% endfor %}
   </section>
 
-  <section class="card">
+  <section class="card" id="issues">
     <h2>Top issues, last 7 days</h2>
     {% if issues.issues %}
     <table>
@@ -57,7 +57,7 @@
     {% endif %}
   </section>
 
-  <div class="grid">
+  <div class="grid" id="charts">
     <section class="card">
       <div class="card-head">
         <h2>Reviews by category</h2>
@@ -105,7 +105,7 @@
     </section>
   </div>
 
-  <section class="card report">
+  <section class="card report" id="report">
     <h2>Latest report</h2>
     {% if report %}
     <p class="muted small">{{ report.period_start }} to {{ report.period_end }} · generated {{ report.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</p>
